@@ -415,6 +415,153 @@ check('NPC dialogue advances', () => {
   return `${npc.def.name}: line ${npc.lineIdx}`;
 });
 
+/* ---------------- gear, combat and economy correctness ---------------- */
+check('rarity actually raises damage throughput', () => {
+  const { WEAPONS, scaled } = window.__gear;
+  const bad = [];
+  for (const id in WEAPONS) {
+    const d = WEAPONS[id];
+    const dps = (r) => scaled(d, r, 'dmg') / scaled(d, r, 'cd');
+    if (dps('spectral') <= dps('common') * 1.4)
+      bad.push(`${id} ${dps('common').toFixed(1)} -> ${dps('spectral').toFixed(1)}`);
+  }
+  assert(bad.length === 0, 'rarity does not improve DPS: ' + bad.join('; '));
+  const d = WEAPONS.rustedBlade;
+  return `rustedBlade ${(scaled(d, 'common', 'dmg') / scaled(d, 'common', 'cd')).toFixed(1)}` +
+         ` -> ${(scaled(d, 'spectral', 'dmg') / scaled(d, 'spectral', 'cd')).toFixed(1)} dps`;
+});
+
+check('knockback cannot chain-lock an enemy out of reach', () => {
+  G.ui.close();
+  G.setMap('grove', 30 * TS, 26 * TS);
+  G.enemies.length = 0;
+  const e = new Enemy('slime', G.player.x + 12, G.player.y);
+  G.enemies.push(e);
+  e.hp = 9999; e.maxHp = 9999;
+  G.player.dir = 2;
+  G.player.knock.x = 0; G.player.knock.y = 0;
+  let reached = false;
+  for (let i = 0; i < 60 * 8; i++) {
+    G.player.swingCd = 0;
+    G.player.attack(G);
+    G.update(1 / 60);
+    if (Math.hypot(e.x - G.player.x, e.y - G.player.y) < e.def.atkRange) reached = true;
+  }
+  assert(reached, 'an enemy under constant attack never closed to its own range');
+  return 'closes despite constant hits';
+});
+
+check('the parry answers the telegraph a player can actually react to', () => {
+  G.setMap('grove', 30 * TS, 26 * TS);
+  const slimeTell = 0.42;
+  G.player.dir = 2;
+  G.player.iframe = 0;
+  G.player.en = 100;
+  // raise the guard the instant the tell appears, then wait out the wind-up
+  G.player.blocking = true;
+  G.player.blockRaisedT = 0;
+  G.player.guardUsed = false;
+  G.player.blockRaisedT = slimeTell;          // reacted immediately, hit lands now
+  const r = G.player.hurt(5, G.player.x + 12, G.player.y, G);
+  assert(r === 'parried', `reacting to the tell gave "${r}" instead of a parry`);
+  return `parries at ${slimeTell}s after the raise`;
+});
+
+check('the boss telegraphs before it commits', () => {
+  G.ui.close();
+  G.setMap('grove', G.boss.x, G.boss.y + 50);
+  G.boss.active = true; G.boss.dead = false;
+  G.boss.hp = G.boss.maxHp; G.boss.cd = 0;
+  G.boss.windup = 0; G.boss.pending = null; G.boss.dashT = 0;
+  G.projectiles.length = 0;
+  G.update(1 / 60);
+  assert(G.boss.windup > 0 && G.boss.pending, 'boss acted with no wind-up');
+  assert(G.projectiles.length === 0, 'boss fired during its own wind-up');
+  return `${G.boss.pending} telegraphed for ${G.boss.windup.toFixed(2)}s`;
+});
+
+check('the shop keeps trading while you are elsewhere', () => {
+  G.ui.close();
+  const rec = recipeById('milkSquare');
+  G.maps.shop.counterSlots.forEach((c, i) => {
+    c.locked = false;
+    c.item = rec; c.quality = 0; c.qty = 40; c.max = 40;
+    c.price = Math.round(G.itemValue(rec, 0) * 0.6);
+  });
+  G.inv.choc = [{ id: rec.id, q: 0, qty: 200 }];
+  G.shopOpen = true;
+  G.awaySales = 0; G.awayGold = 0; G.awayTimer = 0;
+  G.setMap('grove', 30 * TS, 26 * TS);        // walk out
+  const gold0 = G.player.gold;
+  for (let i = 0; i < 60 * 60; i++) G.update(1 / 60);
+  assert(G.awaySales > 0, 'no sales happened while away');
+  assert(G.player.gold > gold0, 'gold did not rise while away');
+  return `${G.awaySales} sold away from the counter, +${G.player.gold - gold0}g`;
+});
+
+check('gold has somewhere to go', () => {
+  const locked = G.allCounters().filter(c => c.cost > 0);
+  assert(locked.length >= 3, 'no purchasable counters exist');
+  const c = G.allCounters().find(c2 => c2.cost > 0);
+  c.locked = true;
+  G.player.gold = 0;
+  assert(!G.unlockCounter(c), 'bought a counter with no gold');
+  G.player.gold = c.cost + 10;
+  assert(G.unlockCounter(c), 'could not buy a counter with the money in hand');
+  assert(G.player.gold < c.cost + 10, 'counter was free');
+  const before = G.ghosts.length;
+  G.player.gold = G.ghostCost + 10;
+  assert(G.hireGhost(), 'could not hire a ghost');
+  assert(G.ghosts.length === before + 1, 'ghost not added');
+  return `counter ${c.cost}g, ghost hire works`;
+});
+
+check('shop appeal keeps paying past the first day', () => {
+  const rec = recipeById('milkSquare');
+  G.allCounters().forEach(c => { c.locked = false; c.item = rec; c.quality = 0; c.qty = 5; });
+  G.npcs.forEach(n => { n.hearts = 0; n.friendship = 0; });
+  const low = G.shopAppeal();
+  G.npcs.forEach(n => { n.hearts = 8; n.friendship = 800; });
+  const high = G.shopAppeal();
+  const rate = (a) => Math.max(0.7, 6.5 * Math.exp(-a / 45));
+  assert(rate(high) < rate(low) * 0.75,
+    `footfall barely moved: ${rate(low).toFixed(2)}s -> ${rate(high).toFixed(2)}s`);
+  G.npcs.forEach(n => { n.hearts = 0; n.friendship = 0; });
+  return `spawn interval ${rate(low).toFixed(2)}s -> ${rate(high).toFixed(2)}s`;
+});
+
+check('a missed temper still resolves once and reports', () => {
+  G.ui.close();
+  G.setMap('kitchen', 12 * TS, 10 * TS);
+  const rec = recipeById('darkTruffle');
+  for (const k in rec.need) G.inv.ing[k] = 20;
+  G.inv.choc = [];
+  G.ui.open('craft', { cauldron: 0 });
+  G.ui.craft = { recipe: rec, pos: 0, dir: 1, speed: 1, target: 0.5,
+                 perfect: 0.05, good: 0.12, passes: 6, running: true };
+  const fakeInp = { mouse: { pressed: true }, wasPressed: () => true };
+  G.ui.update(1 / 60, fakeInp);          // both paths would once fire together
+  G.ui.update(1 / 60, fakeInp);          // and the second threw on a null craft
+  assert(G.inv.choc.reduce((a, s2) => a + s2.qty, 0) > 0, 'nothing was produced');
+  assert(G.msg && /plain batch/.test(G.msg), 'a missed temper said nothing: ' + G.msg);
+  return 'resolves once, reports the miss';
+});
+
+check('pickups stay on the map they dropped on', () => {
+  G.ui.close();
+  G.setMap('grove', 30 * TS, 26 * TS);
+  G.pickups.length = 0;
+  G.dropPickup(G.player.x, G.player.y, 'ing', 'cocoaPod');
+  assert(G.pickups[0].map === 'grove', 'pickup not tagged with its map');
+  const before = G.inv.ing.cocoaPod || 0;
+  G.setMap('shop');
+  G.player.x = G.pickups[0].x; G.player.y = G.pickups[0].y;
+  for (let i = 0; i < 60; i++) G.update(1 / 60);
+  assert((G.inv.ing.cocoaPod || 0) === before, 'a grove pickup was collected inside the shop');
+  G.pickups.length = 0;
+  return 'grove loot stays in the grove';
+});
+
 /* ---------------- the two crafting routes ---------------- */
 check('conching runs unattended and yields a bigger, plainer batch', () => {
   G.ui.close();

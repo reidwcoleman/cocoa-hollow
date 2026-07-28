@@ -99,11 +99,23 @@ export const ALL = { weapon: WEAPONS, offhand: OFFHANDS, ranged: BOWS };
 
 export function itemDef(slot, id) { return (ALL[slot] || {})[id] || null; }
 
+/* Keys where a *smaller* number is better. Multiplying these by the rarity
+ * bonus alongside damage cancels the bonus exactly — a spectral weapon hits
+ * 1.7x harder on a 1.7x longer cooldown, which is identical DPS to a common
+ * one. They have to be divided instead. */
+const INVERSE = new Set(['cd', 'swing', 'energy', 'moveMult']);
+/* Keys that are ratios or flags and must not scale at all. */
+const UNSCALED = new Set(['tier', 'guardArc', 'dmgMult', 'pierce']);
+
 /** Scale a stat by rarity. */
 export function scaled(def, rarity, key) {
   const v = def[key];
   if (typeof v !== 'number') return v;
-  return v * (RARITY[rarity] || RARITY.common).mult;
+  if (UNSCALED.has(key)) return v;
+  const mult = (RARITY[rarity] || RARITY.common).mult;
+  if (key === 'moveMult') return Math.min(1.15, v * Math.sqrt(mult));
+  if (INVERSE.has(key)) return v / mult;
+  return v * mult;
 }
 
 /* ------------------------------------------------------------------ *
@@ -202,3 +214,6 @@ export class Loadout {
 
   forSlot(slot) { return this.owned.filter(o => o.slot === slot); }
 }
+
+// expose for the self test
+if (typeof window !== 'undefined') window.__gear = { WEAPONS, OFFHANDS, BOWS, scaled, RARITY };

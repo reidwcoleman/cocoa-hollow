@@ -3,7 +3,7 @@
 import { VW, VH } from './engine/core.js';
 import { drawText, textWidth, wrapText, panel, slot, slot as slot_, bar } from './art/font.js';
 import { RAMP, C, mix } from './art/palette.js';
-import { INGREDIENTS, INGREDIENT_ORDER, RECIPES, recipeById, VENDORS } from './data.js';
+import { INGREDIENTS, INGREDIENT_ORDER, RECIPES, recipeById, VENDORS, TIPS } from './data.js';
 import { itemDef, RARITY, OFFHANDS } from './gear.js';
 
 const R = RAMP;
@@ -32,8 +32,9 @@ export class UI {
       c.pos += c.dir * dt * c.speed;
       if (c.pos > 1) { c.pos = 1; c.dir = -1; c.passes++; }
       if (c.pos < 0) { c.pos = 0; c.dir = 1; c.passes++; }
-      if (c.passes > 5) { this.resolveCraft(0); }
-      if (inp.mouse.pressed || inp.wasPressed(' ', 'Enter')) {
+      if (c.passes > 5) {
+        this.resolveCraft(0, 'seized');
+      } else if (inp.mouse.pressed || inp.wasPressed(' ', 'Enter')) {
         const d = Math.abs(c.pos - c.target);
         const q = d < c.perfect ? 2 : d < c.good ? 1 : 0;
         this.resolveCraft(q);
@@ -43,12 +44,16 @@ export class UI {
     if (this.mode === 'dialogue' && inp.wasPressed('Enter', 'e', ' ', 'Escape')) this.close();
   }
 
-  resolveCraft(q) {
+  resolveCraft(q, reason) {
     const c = this.craft;
+    if (!c) return;                       // guard: two paths could resolve in one frame
     this.craft = null;
     this.game.doCraft(c.recipe, q);
-    if (q === 2) this.game.notify('Perfect temper! ★★');
+    // every outcome reports — a miss used to be silent and indistinguishable
+    if (q === 2) this.game.notify('Perfect temper! ★★ — the batch is glossy.');
     else if (q === 1) this.game.notify('Good temper. ★');
+    else if (reason === 'seized') this.game.notify('The chocolate seized — a plain batch.');
+    else this.game.notify('Missed the temper — a plain batch.');
     this.close();
   }
 
@@ -427,6 +432,22 @@ export class UI {
     this.header(g, x, y, w, 'DISPLAY COUNTER');
     this.closeBtn(g, x + w - 18, y + 6);
 
+    if (c.locked) {
+      const t = wrapText('This counter is shuttered. Opening it gives you another line to sell.', w - 40);
+      t.forEach((l, i) => drawText(g, l, x + w / 2, y + 34 + i * 11, { color: C.textDim, align: 'center' }));
+      const afford = G.player.gold >= c.cost;
+      const bx = x + w / 2 - 50, by = y + 76;
+      const over = this.hitTest(null, bx, by, 100, 18);
+      g.fillStyle = afford ? (over ? '#7d5514' : '#4a3320') : '#3a2030';
+      g.fillRect(bx, by, 100, 18);
+      drawText(g, `OPEN — ${c.cost}g`, bx + 50, by + 6,
+               { color: afford ? C.textGold : '#c8384e', align: 'center' });
+      if (afford && this.clicked(bx, by, 100, 18)) G.unlockCounter(c);
+      g.drawImage(G.icons.coin, x + 16, y + h - 22);
+      drawText(g, String(G.player.gold) + 'g', x + 30, y + h - 20, { color: C.textGold });
+      return;
+    }
+
     // current
     drawText(g, 'On display:', x + 16, y + 28, { color: C.textDim });
     if (c.item) {
@@ -548,15 +569,18 @@ export class UI {
   /* ---------------- day summary ---------------- */
   panelDayEnd(g) {
     const G = this.game;
-    const w = 240, h = 140, x = (VW - w) / 2, y = (VH - h) / 2;
+    const w = 250, h = 152, x = (VW - w) / 2, y = (VH - h) / 2;
     g.fillStyle = 'rgba(4,4,12,0.7)'; g.fillRect(0, 0, VW, VH);
     panel(g, x, y, w, h, 'wood');
     this.header(g, x, y, w, `DAY ${G.day - 1} COMPLETE`);
-    drawText(g, `Earned today: ${G.lastDayGold || G.dayGold}g`, x + w / 2, y + 40, { color: C.textGold, align: 'center' });
-    drawText(g, `Total gold: ${G.player.gold}g`, x + w / 2, y + 54, { color: C.text, align: 'center' });
-    drawText(g, `Chocolates sold: ${G.totalSales}`, x + w / 2, y + 68, { color: C.text, align: 'center' });
-    const tip = wrapText('The lamps relight themselves at dawn. So do you.', w - 40);
-    tip.forEach((l, i) => drawText(g, l, x + w / 2, y + 90 + i * 11, { color: C.textDim, align: 'center' }));
+    drawText(g, `Earned: ${G.lastDayGold || G.dayGold}g`, x + w / 2, y + 36, { color: C.textGold, align: 'center' });
+    drawText(g, `Spent: ${G.lastDaySpent || 0}g`, x + w / 2, y + 48, { color: '#ff9a8a', align: 'center' });
+    drawText(g, `Upkeep: ${G.lastUpkeep || 0}g`, x + w / 2, y + 60, { color: '#ff9a8a', align: 'center' });
+    drawText(g, `Purse: ${G.player.gold}g`, x + w / 2, y + 74, { color: C.text, align: 'center' });
+    drawText(g, `Sold in all: ${G.totalSales}`, x + w / 2, y + 86, { color: C.textDim, align: 'center' });
+    // the day's tip belongs here, not racing a 5s toast behind this scrim
+    const tip = wrapText(TIPS[(G.day - 1) % TIPS.length], w - 40);
+    tip.forEach((l, i) => drawText(g, l, x + w / 2, y + 102 + i * 10, { color: C.textDim, align: 'center' }));
     drawText(g, '[ENTER]', x + w / 2, y + h - 20, { color: C.textGold, align: 'center' });
   }
 

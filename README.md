@@ -60,7 +60,13 @@ the exchange, which sell ingredients you'd otherwise have to fight for.
 
 **Pricing** matters. Every chocolate has a market value based on its recipe and
 star rating. Undercut it and everything sells; go much above it and customers
-walk away. Higher-star stock also draws bigger crowds.
+walk away. Higher-star stock and townsfolk goodwill both widen the crowd, and
+the shop keeps trading while you are out in the grove — it reports what it took
+when you walk back in.
+
+**Gold has somewhere to go.** You start with two display counters; the rest are
+shuttered and cost 900g to 15,000g to open. Ghost staff are hired, not given.
+Every night takes an upkeep against the day's earnings.
 
 ## Layout
 
@@ -68,7 +74,7 @@ walk away. Higher-star stock also draws bigger crowds.
 index.html          canvas + error reporting
 main.js             boot, scene harness, capture mode
 server.py           static server + /shot endpoint used by the art harness
-test.html/.js       34-check self test over every system
+test.html/.js       49-check self test over every system
 
 src/
   engine/core.js    screen scaling, input, fixed-step loop, camera

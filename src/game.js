@@ -82,15 +82,21 @@ export class Game {
     this.npcs = NPCS.map(d => new NPC(d));
     this.ghosts = [];
     this.customers = [];
-    for (let i = 0; i < 4; i++)
+    for (let i = 0; i < 2; i++)
       this.ghosts.push(new Ghost(i % 3, (7 + i * 4) * TS, (8 + (i % 2) * 3) * TS, GHOST_NAMES[i]));
     this.boss = new Boss(this.maps.grove.bossArena.x + this.maps.grove.bossArena.w / 2,
                          this.maps.grove.bossArena.y + this.maps.grove.bossArena.h / 2);
 
     this.spawnGroveEnemies();
 
-    /* ---- shop counters ---- */
-    for (const c of this.maps.shop.counterSlots) { c.max = 12; c.qty = 0; c.item = null; c.price = 0; }
+    /* ---- shop counters: the first two come with the castle, the rest are
+     * bought. Gold had nothing to buy before this. ---- */
+    this.maps.shop.counterSlots.forEach((c, i) => {
+      c.max = 12; c.qty = 0; c.item = null; c.price = 0;
+      c.locked = i >= 2;
+      c.cost = [0, 0, 900, 2600, 6500, 15000][i] || 15000;
+    });
+    this.ghostCost = 1800;
 
     this.setMap('town', 41 * TS, 22 * TS);
     this.notify('Day 1 — ' + TIPS[0]);
@@ -136,6 +142,7 @@ export class Game {
     this.smoke.puffs.length = 0;
     this.particles.clear();
     if (id === 'grove' && this.enemies.length === 0) this.spawnGroveEnemies();
+    if (id === 'shop') this.reportAway();
   }
 
   spawnGroveEnemies() {
@@ -176,7 +183,12 @@ export class Game {
     for (const f of this.maps.grove.forage) if (Math.random() < 0.75) f.taken = false;
     this.lastDayGold = this.dayGold;
     this.lastDaySpent = this.daySpent || 0;
+    // upkeep: candles, coal and cocoa are not free
+    const upkeep = Math.round(60 + this.dayGold * 0.12 + this.ghosts.length * 40);
+    this.lastUpkeep = Math.min(this.player.gold, upkeep);
+    this.player.gold = Math.max(0, this.player.gold - upkeep);
     this.daySpent = 0;
+    this.awaySales = 0; this.awayGold = 0; this.awaySnub = 0;
     this.spawnGroveEnemies();
     this.dayGold = 0;
     this.setMap('shop');
@@ -218,6 +230,9 @@ export class Game {
 
       this.player.update(dt, inp, this.map, this);
       this.handleInteract(inp);
+      // conching runs on the same clock as everything else; outside this gate
+      // a player could hold a panel open and grind batches for free
+      this.updateConches(dt);
     }
 
     this.cam.update(dt);
@@ -228,6 +243,8 @@ export class Game {
     if (this.mapId === 'shop') {
       for (const gh of this.ghosts) gh.update(dt, this.map, this);
       this.updateShop(dt);
+    } else if (this.shopOpen) {
+      this.updateShopOffscreen(dt);
     }
     if (this.mapId === 'grove') this.updateGrove(dt);
 
@@ -287,6 +304,7 @@ export class Game {
     // pickups drift toward the player
     for (let i = this.pickups.length - 1; i >= 0; i--) {
       const pk = this.pickups[i];
+      if (pk.map && pk.map !== this.mapId) continue;   // stays on its own map
       pk.life -= dt; pk.bob += dt * 5;
       const d = Math.hypot(pk.x - this.player.x, pk.y - this.player.y);
       if (d < 46) {
@@ -301,7 +319,6 @@ export class Game {
       if (pk.life <= 0) this.pickups.splice(i, 1);
     }
 
-    this.updateConches(dt);
     this.particles.update(dt);
     this.floatText.update(dt);
     this.smoke.update(dt, this.t);
@@ -381,11 +398,15 @@ export class Game {
     });
   }
 
-  onEnemyTelegraph(e) {
-    e.flash = 0.18;
-    this.floatText.add(e.x, e.y - 26, '!', '#ff5a4a');
-    this.particles.burst(e.x, e.y - 8, 6,
-      { speed: 30, life: 0.35, col: ['#ff5a4a', '#faea61'], size: 1, drag: 0.9 });
+  onEnemyTelegraph(e, unblockable) {
+    e.flash = 0.22;
+    // a different mark for blows you must step out of vs blows you can answer
+    this.floatText.add(e.x, e.y - 26, unblockable || e.def && e.def.unblockable ? '✖' : '!',
+                       unblockable || (e.def && e.def.unblockable) ? '#ff2a2a' : '#ffd066');
+    this.particles.burst(e.x, e.y - 8, 8,
+      { speed: 34, life: 0.4, col: unblockable ? ['#ff2a2a', '#ff7a4a'] : ['#ffd066', '#faea61'],
+        size: 1, drag: 0.9 });
+    this.sfx('shoot');
   }
 
   onGuardBreak(pl) {
@@ -491,11 +512,11 @@ export class Game {
   }
 
   dropPickup(x, y, kind, id) {
-    this.pickups.push({ x, y, kind, id, life: 26, bob: Math.random() * 6, qty: 1 });
+    this.pickups.push({ x, y, kind, id, map: this.mapId, life: 26, bob: Math.random() * 6, qty: 1 });
   }
 
   dropGear(x, y, gear) {
-    this.pickups.push({ x, y, kind: 'gear', gear, life: 60, bob: Math.random() * 6, qty: 1 });
+    this.pickups.push({ x, y, kind: 'gear', gear, map: this.mapId, life: 60, bob: Math.random() * 6, qty: 1 });
     FX.sparkle(this.particles, x, y, RARITY[gear.rarity].col);
   }
 
@@ -610,7 +631,31 @@ export class Game {
   }
 
   /* ---------------- shop simulation ---------------- */
-  shopCounters() { return this.maps.shop.counterSlots; }
+  shopCounters() { return this.maps.shop.counterSlots.filter(c => !c.locked); }
+  allCounters() { return this.maps.shop.counterSlots; }
+
+  unlockCounter(c) {
+    if (!c.locked) return false;
+    if (!this.spend(c.cost)) { this.notify("You can't afford that counter yet."); this.sfx('hurt'); return false; }
+    c.locked = false;
+    this.notify(`Counter opened for ${c.cost}g.`);
+    FX.sparkle(this.particles, c.x + 16, c.y, '#ffd066');
+    this.sfx('bell');
+    return true;
+  }
+
+  hireGhost() {
+    if (this.ghosts.length >= 6) { this.notify('The staff room is full.'); return false; }
+    if (!this.spend(this.ghostCost)) { this.notify("You can't afford another pair of hands."); this.sfx('hurt'); return false; }
+    const i = this.ghosts.length;
+    const g2 = new Ghost(i % 3, (8 + i * 3) * TS, 8 * TS, GHOST_NAMES[i % GHOST_NAMES.length]);
+    this.ghosts.push(g2);
+    this.ghostCost = Math.round(this.ghostCost * 2.2);
+    this.notify(`${g2.name} drifts in and ties on an apron.`);
+    FX.ghostPoof(this.particles, g2.x, g2.y);
+    this.sfx('bell');
+    return true;
+  }
 
   restock(c) {
     if (!c.item) return;
@@ -628,8 +673,11 @@ export class Game {
     if (this.shopOpen) {
       this.customerTimer -= dt;
       const appeal = this.shopAppeal();
-      if (this.customerTimer <= 0 && this.customers.length < 7) {
-        this.customerTimer = Math.max(1.2, 6.5 - appeal * 0.35);
+      const cap = Math.min(12, 5 + Math.floor(this.townHearts() / 4));
+      if (this.customerTimer <= 0 && this.customers.length < cap) {
+        // asymptotic, so hearts and star stock keep paying past the first day;
+        // the old linear form hit its floor at appeal 15 and threw the rest away
+        this.customerTimer = Math.max(0.7, 6.5 * Math.exp(-appeal / 45));
         this.spawnCustomer();
       }
     }
@@ -638,6 +686,44 @@ export class Game {
       c.update(dt, this.map, this);
       if (c.done) this.customers.splice(i, 1);
     }
+  }
+
+  /**
+   * The shop keeps trading while you are elsewhere. Every piece of copy in the
+   * game promises this; simulating it only while you stand in the room made the
+   * whole "go forage while the town shops" loop a lie.
+   */
+  updateShopOffscreen(dt) {
+    this.awayTimer = (this.awayTimer || 0) - dt;
+    if (this.awayTimer > 0) return;
+    const appeal = this.shopAppeal();
+    this.awayTimer = Math.max(1.4, 9.0 * Math.exp(-appeal / 45));
+    const stocked = this.shopCounters().filter(c => c.item && c.qty > 0);
+    if (!stocked.length) return;
+    const c = stocked[(Math.random() * stocked.length) | 0];
+    // an abstracted walk-in: same price sensitivity, no pathing
+    const fair = this.itemValue(c.item, c.quality);
+    const ratio = c.price / fair;
+    const chance = ratio <= 1 ? 0.9 : Math.max(0.05, 1.45 - ratio * 0.55);
+    if (Math.random() > chance) { this.awaySnub = (this.awaySnub || 0) + 1; return; }
+    c.qty -= 1;
+    const paid = Math.round(c.price);
+    this.player.gold += paid;
+    this.dayGold += paid;
+    this.totalSales += 1;
+    this.awaySales = (this.awaySales || 0) + 1;
+    this.awayGold = (this.awayGold || 0) + paid;
+    // ghosts keep the counters filled in your absence too
+    if (c.qty <= 2) this.restock(c);
+  }
+
+  /** Report what the shop did while you were out, once you walk back in. */
+  reportAway() {
+    if (!this.awaySales) { this.awaySnub = 0; return; }
+    const s2 = this.awaySales === 1 ? '' : 's';
+    this.notify(`While you were out: ${this.awaySales} sale${s2}, +${this.awayGold}g.`
+      + (this.awaySnub ? ` ${this.awaySnub} walked away — too dear.` : ''));
+    this.awaySales = 0; this.awayGold = 0; this.awaySnub = 0;
   }
 
   shopAppeal() {
@@ -944,6 +1030,7 @@ export class Game {
 
     // pickups
     for (const pk of this.pickups) {
+      if (pk.map && pk.map !== this.mapId) continue;
       const icon = pk.kind === 'gear'
         ? this.icons.tool[itemDef(pk.gear.slot, pk.gear.id).icon]
         : this.icons.ing[pk.id];
@@ -1048,7 +1135,8 @@ export class Game {
                       lampR > 80 ? 0.72 : 0.5, 0.16);
     // cauldrons / dynamic
     for (const pk of this.pickups)
-      this.lighting.add(pk.x - camx, pk.y - camy - 6, pk.kind === 'gear' ? 30 : 22,
+      if (!pk.map || pk.map === this.mapId)
+        this.lighting.add(pk.x - camx, pk.y - camy - 6, pk.kind === 'gear' ? 30 : 22,
                         pk.kind === 'gear' ? RARITY[pk.gear.rarity].col : '#d6f4ff', 0.85, 0.55);
     if (this.mapId === 'grove') {
       for (const f of map.forage) if (!f.taken)

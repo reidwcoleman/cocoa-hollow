@@ -59,6 +59,7 @@ export class Player {
     this.loadout = new Loadout();
     this.shootCd = 0;
     this.blockRaisedT = 99;   // seconds since the guard went up
+    this.guardUsed = true;    // has this raise already answered a blow?
     this.guardBreak = 0;
   }
 
@@ -89,9 +90,13 @@ export class Player {
 
     const wantBlock = !uiOpen && input.isDown('Shift') && this.swingT <= 0
                       && this.loadout.canBlock() && this.guardBreak <= 0;
-    if (wantBlock && !this.blocking) this.blockRaisedT = 0;
-    else if (wantBlock) this.blockRaisedT += dt;
-    else this.blockRaisedT = 99;
+    if (wantBlock && !this.blocking) {
+      this.blockRaisedT = 0;
+      this.guardUsed = false;
+      // raising the guard costs stamina up front, so mashing it is not free
+      this.en = Math.max(0, this.en - 6);
+    } else if (wantBlock) this.blockRaisedT += dt;
+    else { this.blockRaisedT = 99; this.guardUsed = true; }
     this.blocking = wantBlock;
     // holding the guard up costs stamina, so turtling is not free
     if (this.blocking && this.blockRaisedT > 0.35) this.en = Math.max(0, this.en - 5 * dt);
@@ -192,9 +197,13 @@ export class Player {
                   || (this.dir === DIR.S && ay > Math.abs(ax) * (1 - arc))
                   || (this.dir === DIR.N && -ay > Math.abs(ax) * (1 - arc));
       if (facing && !unblockable) {
-        // raising the guard *into* the blow is a parry: full negation, a stun,
-        // and the fast-attack window. Standing behind a held guard only soaks.
-        if (this.blockRaisedT < 0.35) {
+        // Raising the guard *into* the blow is a parry. The window is measured
+        // against the ATTACK as well as the keypress: a slime telegraphs for
+        // 0.42s, so a player reacting to the tell would always miss a window
+        // measured only from when they pressed.
+        const answering = this.guardUsed === false && this.blockRaisedT < 0.9;
+        if (this.blockRaisedT < 0.35 || answering) {
+          this.guardUsed = true;
           this.iframe = this.loadout.stat('offhand', 'block', 0.25);
           this.fastWindow = this.loadout.stat('offhand', 'fastWindow', 2.0);
           game.onBlock(this, fromX, fromY, true);
@@ -233,14 +242,14 @@ export class Player {
 const ENEMY_DEF = {
   // `tell` is the wind-up you can read and answer. Without it a shield is just
   // a toggle; with it, blocking becomes a timing decision.
-  slime:   { hp: 18, dmg: 5,  speed: 26, sight: 130, atkRange: 14, cd: 1.1, tell: 0.42, xp: 1, w: 20, h: 18, oy: 12, gold: [3, 9],
+  slime:   { hp: 18, dmg: 5,  speed: 26, sight: 130, atkRange: 14, cd: 1.1, tell: 0.42, mass: 80, xp: 1, w: 20, h: 18, oy: 12, gold: [3, 9],
              drops: [['cocoaPod', 0.5], ['sugar', 0.35]] },
-  crow:    { hp: 14, dmg: 6,  speed: 52, sight: 170, atkRange: 16, cd: 1.4, tell: 0.5, xp: 1, w: 20, h: 18, oy: 12, gold: [5, 12],
+  crow:    { hp: 14, dmg: 6,  speed: 52, sight: 170, atkRange: 16, cd: 1.4, tell: 0.5, mass: 130, xp: 1, w: 20, h: 18, oy: 12, gold: [5, 12],
              drops: [['moonberry', 0.3], ['cocoaPod', 0.3]] },
-  bat:     { hp: 12, dmg: 4,  speed: 62, sight: 150, atkRange: 14, cd: 0.9, tell: 0.3, xp: 1, w: 22, h: 14, oy: 10, gold: [4, 10],
+  bat:     { hp: 12, dmg: 4,  speed: 62, sight: 150, atkRange: 14, cd: 0.9, tell: 0.3, mass: 140, xp: 1, w: 22, h: 14, oy: 10, gold: [4, 10],
              drops: [['gloomcap', 0.35], ['spiritSalt', 0.12]] },
   // the crab's slam is unblockable — you have to step out of it
-  potcrab: { hp: 34, dmg: 9,  speed: 22, sight: 120, atkRange: 20, cd: 1.6, tell: 0.62, unblockable: true,
+  potcrab: { hp: 34, dmg: 9,  speed: 22, sight: 120, atkRange: 20, cd: 1.6, tell: 0.62, unblockable: true, mass: 45,
              xp: 2, w: 24, h: 20, oy: 14, gold: [10, 22],
              drops: [['emberspice', 0.4], ['sugar', 0.4]] },
 };
@@ -264,6 +273,7 @@ export class Enemy {
     this.flash = 0;
     this.windup = 0;
     this.telegraphed = false;
+    this.knockCd = 0;
     this.bobPh = Math.random() * 6;
   }
 
@@ -280,6 +290,7 @@ export class Enemy {
     this.frame = Math.floor(this.animT) % 4;
     if (this.flash > 0) this.flash -= dt;
     if (this.hurtT > 0) this.hurtT -= dt;
+    if (this.knockCd > 0) this.knockCd -= dt;
     if (this.dead) { this.deathT += dt; return; }
 
     if (this.stun > 0) {
@@ -333,9 +344,16 @@ export class Enemy {
     this.hp -= dmg;
     this.flash = 0.12;
     this.hurtT = 0.2;
-    const a = Math.atan2(this.y - fromY, this.x - fromX);
-    const k = stunned ? 220 : 140;
-    this.knock.x = Math.cos(a) * k; this.knock.y = Math.sin(a) * k;
+    // Displacement is rate-limited and mass-scaled. Without this, the knock
+    // from a normal swing outlasts its own cooldown, so holding attack pushes
+    // anything out of reach forever and the whole telegraph/parry layer is
+    // bypassed.
+    if (this.knockCd <= 0) {
+      const a = Math.atan2(this.y - fromY, this.x - fromX);
+      const k = (stunned ? 220 : 140) * (60 / (this.def.mass || 90));
+      this.knock.x = Math.cos(a) * k; this.knock.y = Math.sin(a) * k;
+      this.knockCd = stunned ? 0.5 : 1.0;
+    }
     FX.hit(game.particles, this.x, this.y - 8);
     game.floatText.add(this.x, this.y - 20, String(dmg), stunned ? '#ffd066' : '#ffffff');
     if (this.hp <= 0) this.die(game);
@@ -380,6 +398,7 @@ export class Boss {
     this.dead = false; this.deathT = 0;
     this.knock = { x: 0, y: 0 };
     this.dashT = 0; this.dashA = 0;
+    this.windup = 0; this.pending = null;
     this.active = false;
   }
   update(dt, map, player, game) {
@@ -414,20 +433,30 @@ export class Boss {
     const sp = 30 + this.phase * 8;
     moveWithCollision(this, map, (dx / dist) * sp * dt, (dy / dist) * sp * dt);
 
+    // wind-up: rooted and flashing, so the charge can be read and stepped out of
+    if (this.windup > 0) {
+      this.windup -= dt;
+      if (this.windup <= 0) {
+        if (this.pending === 'dash') { this.dashA = Math.atan2(dy, dx); this.dashT = 0.65; game.sfx('dash'); }
+        else if (this.pending === 'volley') game.bossVolley(this, player, this.phase * 3 + 3);
+        else game.bossSummon(this);
+        this.pending = null;
+      }
+      return;
+    }
     if (this.cd <= 0) {
       const roll = Math.random();
       if (roll < 0.4 || this.phase === 1) {
-        game.bossVolley(this, player, this.phase * 3 + 3);
-        this.cd = 2.6 - this.phase * 0.4;
+        this.pending = 'volley'; this.windup = 0.55;
+        this.cd = 2.6 - this.phase * 0.4 + this.windup;
       } else if (roll < 0.75) {
-        this.dashA = Math.atan2(dy, dx);
-        this.dashT = 0.65;
-        this.cd = 2.8 - this.phase * 0.3;
-        game.sfx('dash');
+        this.pending = 'dash'; this.windup = 0.75;
+        this.cd = 2.8 - this.phase * 0.3 + this.windup;
       } else {
-        game.bossSummon(this);
-        this.cd = 4.5;
+        this.pending = 'summon'; this.windup = 0.5;
+        this.cd = 4.5 + this.windup;
       }
+      game.onEnemyTelegraph(this, this.pending === 'dash');
     }
     if (Math.abs(this.knock.x) > 2 || Math.abs(this.knock.y) > 2) {
       moveWithCollision(this, map, this.knock.x * dt, this.knock.y * dt);

@@ -136,10 +136,10 @@ export const VENDORS = {
 export const GHOST_NAMES = ['Bess', 'Corvin', 'Mim', 'Otto', 'Sable', 'Wick'];
 
 export const TIPS = [
-  'Hold SHIFT to raise your shield. A blocked hit stuns the enemy.',
+  'Raise your guard INTO the blow, not before it — a parry stuns and opens a fast-attack window. A held guard only soaks, and drains stamina.',
   'Ingredients grow in the Hollow Grove. Head east from the square.',
   'Press C in the castle kitchen to open the recipe book.',
-  'Stock your counters before you open the shop, or nobody buys anything.',
+  'Stock your counters before you open the shop. Trade continues while you are away.',
   'Ghosts restock counters for you while the shop is open.',
   'Higher-star chocolates sell for far more — and draw bigger crowds.',
 ];
