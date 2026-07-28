@@ -738,7 +738,7 @@ export function pineTree(size = 1, snowy = true, seed = 1, hue = 'pine') {
   p.px(cx, top - 4, PN[4]);
   if (snowy) { p.px(cx, top - 4, R.snow[4]); p.px(cx, top - 3, R.snow[3]); }
 
-  outline(p.canvas, '#050212');
+  outline(p.canvas, mix(PN[0], '#050212', 0.35), false, true);
   return p.canvas;
 }
 
@@ -800,7 +800,7 @@ export function bareTree(seed = 1) {
     const by = 10 + ((hash2(k, seed, 38) * (trunkH - 6)) | 0);
     p.px(bx, by, R.snow[3]); p.px(bx + 1, by, R.snow[4]);
   }
-  outline(p.canvas, '#050212');
+  outline(p.canvas, mix(R.bark[0], '#050212', 0.3), false, true);
   return p.canvas;
 }
 
@@ -817,8 +817,8 @@ export function castShadow(w, h) {
       const dx = (i - w / 2) / (w / 2), dy = (j - h / 2) / (h / 2);
       const d = Math.sqrt(dx * dx + dy * dy);
       if (d > 1) continue;
-      const a = 0.5 * (1 - Math.pow(d, 2.0));
-      x.fillStyle = `rgba(46,58,178,${a.toFixed(3)})`;
+      const a = 0.62 * (1 - Math.pow(d, 2.4));
+      x.fillStyle = `rgba(96,110,214,${a.toFixed(3)})`;
       x.fillRect(i, j, 1, 1);
     }
   }

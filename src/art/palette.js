@@ -18,6 +18,9 @@ export const RAMP = {
   stone:   ['#3f4a92', '#5f6fc4', '#8290e2', '#a7b0f2', '#cdd2ff'],
   // paving is brighter than the snow it sits in — pale periwinkle flags
   pave:    ['#7c86d8', '#a3aaf0', '#c4c6fb', '#d8daff', '#eef1ff'],
+  // the lower carriageway sits a clear step darker than the upper walk,
+  // so two adjacent paved strips never read as one poured sheet
+  paveLow: ['#4a5397', '#6570bd', '#8089d8', '#99a0e8', '#b3b9f3'],
   brick:   ['#3b1f3f', '#5a2f52', '#7a4468', '#9a5c80', '#b87a9c'],
   // building facades read dark violet under bright blue roof planes
   masonry: ['#0d0023', '#1f155d', '#382c70', '#4d4071', '#634d7e'],
@@ -113,13 +116,16 @@ export const C = {
   mana:       '#7460cc',
 };
 
-// Ambient light colors per time-of-day key (used by the lighting pass).
+/* Ambient light per time-of-day. The lighting pass MULTIPLIES by these, so a
+ * tint whose blue channel is low crushes blue out of the whole frame and turns
+ * shadow into black. Keeping blue pegged near 255 and carrying the darkening
+ * in red and green is what keeps night saturated blue instead of grey. */
 export const AMBIENT = {
-  dawn:  { tint: '#5a4f8c', amt: 0.52, warm: '#8a6a80' },
-  day:   { tint: '#8f96c8', amt: 0.26, warm: '#9a96b8' },
-  dusk:  { tint: '#4a3168', amt: 0.66, warm: '#9c5a6a' },
-  night: { tint: '#1a2258', amt: 0.84, warm: '#2a3a70' },
-  deep:  { tint: '#121846', amt: 0.90, warm: '#22285c' },
+  dawn:  { tint: '#8a72ff', amt: 0.42, warm: '#8a6a80' },
+  day:   { tint: '#c4c6ff', amt: 0.20, warm: '#9a96b8' },
+  dusk:  { tint: '#7a4aff', amt: 0.54, warm: '#9c5a6a' },
+  night: { tint: '#3a4aff', amt: 0.74, warm: '#2a3a70' },
+  deep:  { tint: '#2634f5', amt: 0.82, warm: '#22285c' },
 };
 
 /** hex -> {r,g,b} */

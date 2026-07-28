@@ -214,6 +214,40 @@ export function buildTown() {
     m.castleDoor = { x: doorTX * TS + 8, y: VERGE_Y * TS + 10 };
   }
 
+  /* ---- a second row of buildings on the lower terrace ----
+   * Their roof planes fill the bottom of the frame the way the reference does,
+   * instead of leaving the carriageway backed by empty snow. */
+  const LOW_BASE = LOW_Y + LOW_H + 6;
+  {
+    let lx2 = 10, k = 0;
+    while (lx2 < W - 20) {
+      const art = ART.houses[(k + 2) % ART.houses.length];
+      const bw = Math.ceil(art.canvas.width / TS);
+      const gRow = LOW_BASE + (hash2(k, 13, 3) > 0.6 ? 1 : 0) - (k % 3 === 1 ? 1 : 0);
+      const gy = gRow * TS, px = lx2 * TS, py = gy - art.groundY;
+      const shW = Math.round(art.canvas.width * 1.1), shH = Math.round(art.canvas.height * 0.32);
+      m.decals.push({ x: px - Math.round(art.canvas.width * 0.18),
+                      y: gy - Math.round(shH * 0.45), img: PR.castShadow(shW, shH) });
+      m.addProp(px, py, art.canvas, gy);
+      for (const L of art.lights) {
+        const [ax, ay, ar, lit] = L;
+        if (lit === false) continue;
+        m.addLight(px + ax, py + ay, ar, '#ffc95e', 0.5, 1, 0.62);
+      }
+      for (const [sx, sy] of art.smokes) m.smokes.push([px + sx, py + sy]);
+      const bh = Math.max(2, Math.ceil((art.canvas.height - art.groundY + 42) / TS));
+      m.blockRect(lx2, gRow - bh, bw, bh);
+      m.reserve(lx2 - 1, gRow - Math.ceil(art.canvas.height / TS) - 1,
+                bw + 2, Math.ceil(art.canvas.height / TS) + 3);
+      // a path from the carriageway down to the door
+      const dtx = lx2 + Math.floor(bw / 2);
+      for (let y = LOW_Y + LOW_H; y <= gRow; y++)
+        for (let x2 = dtx - 1; x2 <= dtx + 1; x2++) m.set(x2, y, 'path');
+      lx2 += bw + 5 + ((hash2(k, 17, 5) * 7) | 0);
+      k++;
+    }
+  }
+
   /* ---- masonry kerb with three flush stairs ---- */
   const stairs = [18, 54, 88];
   for (let kx = 0; kx < W; kx++) {
@@ -401,7 +435,7 @@ export function buildShop() {
   // sized to the viewport is the thing that reads as a placeholder.
   const W = 30, H = 17;
   const m = new GameMap('shop', W, H, { base: 'void', indoor: true, name: 'The Cocoa Hollow' });
-  m.ambient = { key: 'night', amount: 0.30, tint: '#6a4438', bloom: 0.55, vignetteAmt: 0.16 };
+  m.ambient = { key: 'night', amount: 0.30, tint: '#a06a50', bloom: 0.55, vignetteAmt: 0.10 };
 
   const UPPER = [2, 2, 24, 7];       // x, y, w, h in tiles
   const LOWER = [9, 9, 17, 5];
@@ -480,7 +514,7 @@ export function buildShop() {
 export function buildKitchen() {
   const W = 30, H = 17;
   const m = new GameMap('kitchen', W, H, { base: 'void', indoor: true, name: 'The Food Laboratory' });
-  m.ambient = { key: 'deep', amount: 0.40, tint: '#4a2f56', bloom: 0.6, vignetteAmt: 0.18 };
+  m.ambient = { key: 'deep', amount: 0.40, tint: '#7a4aff', bloom: 0.6, vignetteAmt: 0.10 };
 
   // a working hall with an alcove stepping out to the right and a stair landing
   const HALL  = [3, 2, 20, 8];
@@ -564,7 +598,7 @@ export function buildKitchen() {
 export function buildGrove() {
   const W = 76, H = 52;
   const m = new GameMap('grove', W, H, { base: 'snow', name: 'The Hollow Grove' });
-  m.ambient = { key: 'night', amount: 0.44, tint: '#2b3f86', bloom: 0.75, vignetteAmt: 0.40 };
+  m.ambient = { key: 'night', amount: 0.20, tint: '#3a52ff', bloom: 0.7, vignetteAmt: 0.06 };
 
   // deep snow, with bare ground only where the canopy is thickest
   for (let y = 0; y < H; y++)

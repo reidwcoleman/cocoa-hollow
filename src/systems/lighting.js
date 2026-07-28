@@ -58,7 +58,7 @@ export class Lighting {
     if (opts.vignette !== false) {
       const vg = sg.createRadialGradient(VW / 2, VH / 2, VH * 0.34, VW / 2, VH / 2, VH * 1.0);
       vg.addColorStop(0, 'rgba(0,0,0,0)');
-      vg.addColorStop(1, `rgba(6,6,18,${opts.vignetteAmt != null ? opts.vignetteAmt : 0.5})`);
+      vg.addColorStop(1, `rgba(6,6,18,${opts.vignetteAmt != null ? opts.vignetteAmt : 0.06})`);
       sg.fillStyle = vg;
       sg.fillRect(0, 0, VW, VH);
     }
@@ -70,10 +70,11 @@ export class Lighting {
       sg.translate(L.x, L.y);
       const grd = sg.createRadialGradient(0, 0, 0, 0, 0, L.r);
       const a = Math.min(1, L.intensity);
-      grd.addColorStop(0, `rgba(0,0,0,${a})`);
-      grd.addColorStop(0.35, `rgba(0,0,0,${a * 0.8})`);
-      grd.addColorStop(0.68, `rgba(0,0,0,${a * 0.34})`);
-      grd.addColorStop(1, 'rgba(0,0,0,0)');
+      // hard plateaus: repeat each alpha at adjacent offsets so the boundary is
+      // a visible step rather than a smooth ramp
+      const stops = [[0, 1], [0.30, 1], [0.301, 0.72], [0.55, 0.72],
+                     [0.551, 0.40], [0.78, 0.40], [0.781, 0.16], [0.95, 0.16], [1, 0]];
+      for (const [t, k] of stops) grd.addColorStop(t, `rgba(0,0,0,${a * k})`);
       sg.fillStyle = grd;
       sg.fillRect(-L.r, -L.r, L.r * 2, L.r * 2);
       sg.restore();
@@ -99,10 +100,9 @@ export class Lighting {
       const grd = gg.createRadialGradient(0, 0, 0, 0, 0, rr);
       const c = hexToRgb(L.col);
       const a = L.warm * L.intensity;
-      grd.addColorStop(0, `rgba(${c.r},${c.g},${c.b},${a * 0.62})`);
-      grd.addColorStop(0.3, `rgba(${c.r},${c.g},${c.b},${a * 0.4})`);
-      grd.addColorStop(0.7, `rgba(${c.r},${c.g},${c.b},${a * 0.12})`);
-      grd.addColorStop(1, `rgba(${c.r},${c.g},${c.b},0)`);
+      const bs = [[0, 0.62], [0.32, 0.62], [0.321, 0.34], [0.66, 0.34],
+                  [0.661, 0.12], [0.9, 0.12], [1, 0]];
+      for (const [t, k] of bs) grd.addColorStop(t, `rgba(${c.r},${c.g},${c.b},${a * k})`);
       gg.fillStyle = grd;
       gg.fillRect(-rr, -rr, rr * 2, rr * 2);
       gg.restore();

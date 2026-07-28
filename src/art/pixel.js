@@ -178,8 +178,14 @@ export class P {
  * Post-process helpers (operate on whole canvases).
  * ------------------------------------------------------------------ */
 
-/** Add a 1px outline around every opaque pixel. */
-export function outline(canvas, col = '#05050c', diagonal = false) {
+/**
+ * Add a 1px outline around every opaque pixel.
+ *
+ * `skipLit` suppresses the outline on the upper-left (lit) side, which is what
+ * keeps foliage from reading as a sticker pasted onto the ground — a solid
+ * keyline all the way round is reserved for man-made objects.
+ */
+export function outline(canvas, col = '#05050c', diagonal = false, skipLit = false) {
   const x = ctxOf(canvas);
   const w = canvas.width, h = canvas.height;
   const src = x.getImageData(0, 0, w, h);
@@ -197,6 +203,13 @@ export function outline(canvas, col = '#05050c', diagonal = false) {
       if (d[k + 3] > 8) continue;
       let n = A(i - 1, j) + A(i + 1, j) + A(i, j - 1) + A(i, j + 1);
       if (diagonal) n += A(i - 1, j - 1) + A(i + 1, j - 1) + A(i - 1, j + 1) + A(i + 1, j + 1);
+      if (skipLit) {
+        // only outline where the sprite lies below-right of this pixel
+        const below = A(i, j + 1) + A(i + 1, j);
+        if (below <= 8) continue;
+        // and break the line so it never reads as a drawn keyline
+        if (hash2(i, j, 313) > 0.78) continue;
+      }
       if (n > 8) { o[k] = oc[0]; o[k + 1] = oc[1]; o[k + 2] = oc[2]; o[k + 3] = 255; }
     }
   }

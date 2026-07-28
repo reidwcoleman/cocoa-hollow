@@ -18,15 +18,23 @@ function tile(seed, fn) {
 function snowTile(p, seed) {
   // Snow is a broad calm surface. All variation is on a lattice that wraps
   // inside the tile, so no seams and no diagonal banding across a field.
-  const CELLS = 4, SC = TS / CELLS;
+  // Snow is the calmest surface in the scene: a large soft lattice with only
+  // about a fifth of pixels leaving the base tone. Fine per-pixel grain reads
+  // as patterned fabric at 2x zoom.
+  const CELLS = 2, SC = TS / CELLS;
   for (let y = 0; y < TS; y++) {
     for (let x = 0; x < TS; x++) {
       const n = wrapNoise(x / SC, y / SC, CELLS, 300 + seed);
       let i = 3;
-      if (n < 0.34) i = 2;
-      else if (n > 0.74) i = 4;
+      if (n < 0.12) i = 2;
+      else if (n > 0.90) i = 4;
       p.px(x, y, R.snow[i]);
     }
+  }
+  // occasional drift blob, larger than the per-pixel scale
+  if (hash2(seed, 0, 77) > 0.72) {
+    const bx = (hash2(seed, 1, 78) * TS) | 0, by = (hash2(seed, 2, 79) * TS) | 0;
+    p.ellipse(bx, by, 4 + ((hash2(seed, 3, 80) * 3) | 0), 3, R.snow[4]);
   }
   // occasional twig, on roughly one tile in three
   if (hash2(seed, 0, 51) > 0.66) {
@@ -57,8 +65,11 @@ function flagstoneTile(p, seed) {
   const rowH = 8;
   for (let ry = 0; ry < TS; ry += rowH) {
     const r = (ry / rowH) | 0;
-    const off = (r + seed) % 2 ? 5 : 0;       // running bond
-    for (let fx = -8; fx < TS; fx += 8) {
+    // phase from the seed, not just row parity — otherwise every tile puts its
+    // joints at the same x and a paved area becomes graph paper
+    const off = ((r * 5 + seed * 3) % 8);
+    const fw = 6 + ((hash2(r, seed, 261) * 3) | 0);
+    for (let fx = -10; fx < TS; fx += fw + 2) {
       const x = fx + off, y = ry;
       const k = (x * 7 + y * 13 + seed * 31) | 0;
       const b = 2 + Math.round(hash2(k, seed, 251) * 1.8 - 0.4);
@@ -81,16 +92,17 @@ function flagstoneTile(p, seed) {
   // drifted snow creeping across
   for (let y = 0; y < TS; y++)
     for (let x = 0; x < TS; x++) {
-      const n = wrapNoise(x / 4, y / 4, 4, 560 + seed);
-      if (n > 0.80) p.px(x, y, R.snow[3]);
+      const n = wrapNoise(x / 8, y / 8, 2, 560 + seed);
+      if (n > 0.62) p.px(x, y, R.snow[n > 0.78 ? 4 : 3]);
     }
 }
 
-function cobbleTile(p, seed, snowy = true) {
+function cobbleTile(p, seed, snowy = true, ramp = 'pave') {
+  const PV = R[ramp];
   // Explicitly drawn rounded setts on a jittered 3x3 grid. Drawing each stone
   // (rather than deriving them from a distance field) is what makes them
   // actually read as cobbles instead of camouflage mottle.
-  p.rect(0, 0, TS, TS, R.pave[0]);            // joint / mortar
+  p.rect(0, 0, TS, TS, PV[0]);                // joint / mortar
 
   const G = 3, CELL = TS / G;
   const stones = [];
@@ -119,7 +131,7 @@ function cobbleTile(p, seed, snowy = true) {
   };
   // 1. bodies
   forEachCopy((s, cx, cy) => {
-    p.ellipse(cx, cy, s.rx, s.ry, R.pave[Math.max(1, Math.min(3, s.shade))]);
+    p.ellipse(cx, cy, s.rx, s.ry, PV[Math.max(1, Math.min(3, s.shade))]);
   });
   // 2. shaded undersides
   forEachCopy((s, cx, cy) => {
@@ -127,20 +139,20 @@ function cobbleTile(p, seed, snowy = true) {
     for (let a = 20; a < 160; a += 14) {
       const rad = a * Math.PI / 180;
       p.px(Math.round(cx + Math.cos(rad) * s.rx), Math.round(cy + Math.sin(rad) * s.ry),
-           R.pave[Math.max(0, base - 1)]);
+           PV[Math.max(0, base - 1)]);
     }
   });
   // 3. lit crowns, upper-left
   forEachCopy((s, cx, cy) => {
     const base = Math.max(1, Math.min(3, s.shade));
-    p.ellipse(cx - 0.5, cy - 0.6, s.rx - 0.9, s.ry - 0.7, R.pave[Math.min(4, base + 1)]);
-    p.px(Math.round(cx - s.rx * 0.35), Math.round(cy - s.ry * 0.55), R.pave[Math.min(4, base + 2)]);
+    p.ellipse(cx - 0.5, cy - 0.6, s.rx - 0.9, s.ry - 0.7, PV[Math.min(4, base + 1)]);
+    p.px(Math.round(cx - s.rx * 0.35), Math.round(cy - s.ry * 0.55), PV[Math.min(4, base + 2)]);
   });
 
   // a little grit in the joints
   for (let k = 0; k < 5; k++) {
     const gx = (hash2(k, seed, 231) * TS) | 0, gy = (hash2(k, seed, 232) * TS) | 0;
-    p.px(gx, gy, R.pave[1]);
+    p.px(gx, gy, PV[1]);
   }
 
   if (snowy) {
@@ -404,11 +416,11 @@ function variants(name, n, fn) {
 }
 
 export function buildTiles() {
-  variants('snow', 6, snowTile);
+  variants('snow', 12, snowTile);
   variants('cobble', 6, flagstoneTile);
   variants('cobbleEdge', 6, (p, s) => { flagstoneTile(p, s); snowOver(p, s, 0.55); });
   variants('cobbleEdge2', 6, (p, s) => { flagstoneTile(p, s); snowOver(p, s, 0.28); });
-  variants('cobbleBare', 4, (p, s) => cobbleTile(p, s, false));
+  variants('cobbleBare', 5, (p, s) => cobbleTile(p, s, false, 'paveLow'));
   variants('path', 5, pathTile);
   variants('castleFloor', 5, castleFloorTile);
   variants('woodFloor', 5, woodFloorTile);

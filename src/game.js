@@ -958,10 +958,12 @@ export class Game {
     for (const d of draw) {
       if (!d.shadow) continue;
       const [sx, sy, sr] = d.shadow;
-      g.globalAlpha = 0.34;
-      g.fillStyle = '#05050c';
+      // a translucent near-black punches a grey hole in blue snow; a solid
+      // chromatic tone keeps the shadow inside the palette
+      g.globalAlpha = 1;
+      g.fillStyle = map.indoor ? '#2d1410' : '#6a76d8';
       g.beginPath();
-      g.ellipse(sx - camx, sy - camy, sr, Math.max(2, sr * 0.4), 0, 0, Math.PI * 2);
+      g.ellipse(sx - camx + 2, sy - camy + 1, sr, Math.max(2, sr * 0.4), 0, 0, Math.PI * 2);
       g.fill();
     }
     g.globalAlpha = 1;
@@ -1069,8 +1071,8 @@ export class Game {
       amount: amb.amount != null ? amb.amount : undefined,
       tint: amb.tint,
       bloom: amb.bloom != null ? amb.bloom : 0.8,
-      vignetteAmt: amb.vignetteAmt != null ? amb.vignetteAmt : 0.34,
-      gradeAmt: map.indoor ? 0.05 : 0.06,
+      vignetteAmt: amb.vignetteAmt != null ? amb.vignetteAmt : 0.06,
+      gradeAmt: map.indoor ? 0.04 : 0.04,
       gradeCol: map.indoor ? '#6a4a80' : '#5a6ab4',
     });
 
