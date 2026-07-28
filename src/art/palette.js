@@ -59,8 +59,10 @@ export const RAMP = {
   // --- flora ---
   pine:    ['#00062f', '#001a4d', '#003b73', '#1e7ab3', '#52a5f3'],
   // a mintier conifer so a stand of trees isn't all one hue
-  pineB:   ['#022630', '#054a52', '#0d7a78', '#2ba79b', '#5fd0bd'],
-  pineC:   ['#0a1140', '#152a7a', '#2749b8', '#4f7bea', '#8fb0ff'],
+  pineB:   ['#063a44', '#0d6a70', '#1a9a95', '#3fc4b4', '#7ee6d2'],
+  pineC:   ['#132258', '#24409c', '#3b68d8', '#6f9bf5', '#b3cbff'],
+  // a frosted conifer that reads almost white against the snow
+  pineD:   ['#26356e', '#4a63ac', '#7f9adc', '#b3c8f4', '#e6efff'],
   bark:    ['#1e1020', '#3a2020', '#5a3324', '#7c4a2c', '#a06a3e'],
   leaf:    ['#062b3a', '#0d4a5e', '#166f84', '#2b96b0', '#57bcd0'],
 

@@ -61,9 +61,10 @@ export function buildArt() {
   ART.fountain = PR.fountain();
   ART.pine = [
     PR.pineTree(0.95, true, 1, 'pine'),  PR.pineTree(1.20, true, 2, 'pineB'),
-    PR.pineTree(0.75, true, 3, 'pineC'), PR.pineTree(1.05, true, 4, 'pine'),
-    PR.pineTree(0.62, true, 5, 'pineB'), PR.pineTree(1.35, true, 6, 'pineC'),
-    PR.pineTree(0.88, true, 7, 'pineB'), PR.pineTree(1.12, true, 8, 'pine'),
+    PR.pineTree(0.75, true, 3, 'pineD'), PR.pineTree(1.05, true, 4, 'pineC'),
+    PR.pineTree(0.62, true, 5, 'pineB'), PR.pineTree(1.35, true, 6, 'pineD'),
+    PR.pineTree(0.88, true, 7, 'pineC'), PR.pineTree(1.12, true, 8, 'pine'),
+    PR.pineTree(1.00, true, 9, 'pineD'), PR.pineTree(0.82, true, 10, 'pineB'),
   ];
   ART.pineBare = [PR.pineTree(1.0, false, 5), PR.pineTree(1.2, false, 6)];
   ART.bare = [PR.bareTree(1), PR.bareTree(2), PR.bareTree(3), PR.bareTree(4)];
@@ -88,9 +89,13 @@ export function buildArt() {
   for (const k of ['cocoaPod','sugar','milk','cream','moonberry','gloomcap','frostmint','emberspice','spiritSalt','honey'])
     ART.forage[k] = PR.foragePlant(k);
   ART.shopfronts = [
-    PR.shopfront({ w: 128, sign: 'BAKERY',     roof: 'roofSlate', stone: 'river', trim: 'wood', seed: 5,  chimneyX: 0.18 }),
-    PR.shopfront({ w: 112, sign: 'APOTHECARY', roof: 'teal',      stone: 'river', trim: 'oak',  seed: 11, chimneyX: 0.78, signCol: '#4fc6ce' }),
-    PR.shopfront({ w: 136, sign: 'THE ANVIL',  roof: 'plum',      stone: 'river', trim: 'wood', seed: 17, chimneyX: 0.24, signCol: '#f0a52a' }),
+    PR.shopfront({ w: 122, sign: 'BAKERY',     roof: 'roofSlate', stone: 'river',   trim: 'wood', seed: 5,  chimneyX: 0.18 }),
+    PR.shopfront({ w: 108, sign: 'APOTHECARY', roof: 'teal',      stone: 'brick',   trim: 'oak',  seed: 11, chimneyX: 0.78, signCol: '#4fc6ce' }),
+    PR.shopfront({ w: 132, sign: 'THE ANVIL',  roof: 'plum',      stone: 'river',   trim: 'wood', seed: 17, chimneyX: 0.24, signCol: '#f0a52a' }),
+    PR.shopfront({ w: 114, sign: 'TAILOR',     roof: 'ruby',      stone: 'masonry', trim: 'oak',  seed: 23, chimneyX: 0.66, signCol: '#c7b7ff' }),
+    PR.shopfront({ w: 126, sign: 'THE LEDGER', roof: 'roofSlate', stone: 'brick',   trim: 'oak',  seed: 29, chimneyX: 0.30, signCol: '#faea61' }),
+    PR.shopfront({ w: 104, sign: 'DAIRY',      roof: 'teal',      stone: 'river',   trim: 'wood', seed: 31, chimneyX: 0.72, signCol: '#e6e8ff' }),
+    PR.shopfront({ w: 118, sign: 'THE LANTERN',roof: 'plum',      stone: 'masonry', trim: 'wood', seed: 37, chimneyX: 0.20, signCol: '#f0a52a' }),
   ];
   ART.roomFrame = {};
   ART.wallCabinet = PR.wallCabinet(3);
@@ -111,265 +116,239 @@ export function buildArt() {
  * TOWN
  * ================================================================== */
 export function buildTown() {
-  const W = 84, H = 62;
-  const m = new GameMap('town', W, H, { base: 'snow', name: 'Hollow Square' });
+  /* A linear street town on terraces, not a plaza.
+   *
+   * One dead-straight east-west thoroughfare; every facade faces down-screen
+   * and lands on a shared building line; the public corridor is a swept verge,
+   * a flagstone walk, a masonry kerb, then a cobbled lower level. Buildings
+   * never abut — the gaps between them are mostly closed with fence, bush and
+   * a corner lamp, so the row reads as a street with interstices. */
+  const W = 116, H = 44;
+  const m = new GameMap('town', W, H, { base: 'snow', name: 'Hollow Street' });
 
-  // deep snow everywhere, cobbled plaza in the middle
-  for (let y = 0; y < H; y++)
-    for (let x = 0; x < W; x++) {
-      const n = fnoise(x / 9, y / 9, 3);
-      m.set(x, y, n > 0.63 ? 'snow' : 'snow');
-    }
+  const BASE_Y = 20;            // shop ground line
+  const VERGE_Y = BASE_Y + 1;   // swept strip under the shopfronts
+  const WALK_Y = BASE_Y + 2;    // flagstone walk
+  const WALK_H = 2;
+  const KERB_Y = WALK_Y + WALK_H;
+  const LOW_H = 3;              // cobbled carriageway below the kerb
+  const LOW_Y = KERB_Y + 1;
 
-  // plaza — a compact square, deliberately small so snow and props frame it
-  const pcx = 41, pcy = 35, prx = 9, pry = 6;
-  for (let y = pcy - pry - 1; y <= pcy + pry + 1; y++)
-    for (let x = pcx - prx - 1; x <= pcx + prx + 1; x++) {
-      const dx = (x - pcx) / prx, dy = (y - pcy) / pry;
-      const d = Math.sqrt(dx * dx + dy * dy);
-      const edge = 0.98 + fnoise(x / 3.5, y / 3.5, 9) * 0.28;
-      if (d < edge) m.set(x, y, 'path');              // packed snow underfoot
-      else if (d < edge + 0.26) m.set(x, y, 'snow');
-    }
-  // cobbled apron ringing the fountain
-  for (let y = pcy - 5; y <= pcy + 5; y++)
-    for (let x = pcx - 8; x <= pcx + 8; x++) {
-      const dx = (x - pcx) / 8, dy = (y - pcy + 0.5) / 5;
-      const d = Math.sqrt(dx * dx + dy * dy);
-      if (d < 0.94 + fnoise(x / 3, y / 3, 33) * 0.22) m.set(x, y, 'cobble');
-    }
+  /* ---- the corridor ---- */
+  m.fill(0, WALK_Y, W, WALK_H, 'cobble');
+  m.fill(0, LOW_Y, W, LOW_H, 'cobbleBare');
+  // snow reclaims the edges of the carriageway in irregular bites, so the
+  // paving never reads as one poured sheet
+  for (let x2 = 0; x2 < W; x2++) {
+    const bite = fnoise(x2 / 6, 3, 41);
+    if (bite > 0.62) m.set(x2, LOW_Y + LOW_H - 1, 'path');
+    if (bite > 0.74) m.set(x2, LOW_Y + LOW_H - 2, 'path');
+    if (fnoise(x2 / 5, 9, 43) > 0.7) m.set(x2, LOW_Y, 'path');
+  }
+  m.fill(0, KERB_Y, W, 1, 'cobbleBare');
 
-  // feather the paving edge with two rings of increasingly snowy cobble
-  const cobbleFeather = () => {
-    const snap = m.ground.slice();
-    const at = (x, y) => (m.inb(x, y) ? snap[m.idx(x, y)] : 'snow');
-    for (let y = 0; y < H; y++)
-      for (let x = 0; x < W; x++) {
-        if (at(x, y) !== 'cobble') continue;
-        const n4 = [at(x - 1, y), at(x + 1, y), at(x, y - 1), at(x, y + 1)];
-        const n8 = n4.concat([at(x - 1, y - 1), at(x + 1, y - 1), at(x - 1, y + 1), at(x + 1, y + 1)]);
-        if (n4.some(t => t !== 'cobble' && t !== 'cobbleBare')) m.set(x, y, 'cobbleEdge');
-        else if (n8.some(t => t !== 'cobble' && t !== 'cobbleBare')) m.set(x, y, 'cobbleEdge2');
-      }
+  const lamps = [], gaps = [];
+
+  /* ---- the shop row: one walker left to right along the baseline ---- */
+  const placeBuilding = (art, tx, groundRow, isShop) => {
+    const bw = Math.ceil(art.canvas.width / TS);
+    const gy = groundRow * TS;
+    const px = tx * TS, py = gy - art.groundY;
+    const shW = Math.round(art.canvas.width * 1.1), shH = Math.round(art.canvas.height * 0.34);
+    m.decals.push({ x: px - Math.round(art.canvas.width * 0.18),
+                    y: gy - Math.round(shH * 0.45), img: PR.castShadow(shW, shH) });
+    m.addProp(px, py, art.canvas, gy);
+    for (const L of art.lights) {
+      const [lx, ly, lr, lit] = L;
+      if (lit === false) continue;
+      m.addLight(px + lx, py + ly, lr, '#ffcf70', 0.55, 1, 0.7);
+    }
+    for (const [sx, sy] of art.smokes) m.smokes.push([px + sx, py + sy]);
+    // solid from the ground line up through the facade
+    const bh = Math.max(2, Math.ceil((art.canvas.height - art.groundY + 46) / TS));
+    m.blockRect(tx, groundRow - bh, bw, bh);
+    m.reserve(tx - 1, groundRow - Math.ceil(art.canvas.height / TS) - 1,
+              bw + 2, Math.ceil(art.canvas.height / TS) + 3);
+    // swept threshold, three tiles centred on the door, on the verge only
+    const dtx = tx + Math.floor(bw / 2);
+    for (let x = dtx - 1; x <= dtx + 1; x++) m.set(x, VERGE_Y, 'cobble');
+    return bw;
   };
 
-  // roads: north to the castle, east to the grove, south + west out of town
-  for (let y = 12; y < pcy; y++) for (let x = 39; x < 44; x++) m.set(x, y, 'cobble');
-  for (let x = pcx + prx; x < W; x++) for (let y = 32; y < 37; y++) m.set(x, y, 'path');
-  for (let x = 4; x < pcx - prx + 1; x++) for (let y = 33; y < 37; y++) m.set(x, y, 'path');
-  for (let y = pcy + pry; y < H - 6; y++) for (let x = 38; x < 43; x++) m.set(x, y, 'path');
+  let x = 4, i = 0;
+  while (x < W - 16) {
+    const useHouse = i % 3 === 2;
+    const art = useHouse ? ART.houses[i % ART.houses.length]
+                         : ART.shopfronts[i % ART.shopfronts.length];
+    const jitter = hash2(i, 9, 3) > 0.62 ? 1 : 0;
+    const bw = placeBuilding(art, x, BASE_Y + jitter, !useHouse);
+    // verge under this frontage only — the gaps stay snow
+    m.fill(x, VERGE_Y, bw, 1, 'cobbleBare');
+    lamps.push(x - 1);
+    lamps.push(x + bw);
+    const gw = 3 + ((hash2(i, 4, 7) * 6) | 0);
+    gaps.push({ x: x + bw, w: gw, i });
+    x += bw + gw;
+    i++;
+  }
 
-  cobbleFeather();
-
-  /* ---- the castle shop (north) ---- */
+  /* ---- the castle shop anchors the row ---- */
   const cs = ART.castle;
-  const csx = 41 * TS - (cs.canvas.width >> 1), csy = 2 * TS;
+  const csTX = 52;
   {
-    const shW = Math.round(cs.canvas.width * 1.1), shH = Math.round(cs.canvas.height * 0.4);
-    m.decals.push({ x: csx - Math.round(cs.canvas.width * 0.12),
-                    y: csy + cs.groundY - Math.round(shH * 0.55),
-                    img: PR.castShadow(shW, shH) });
-  }
-  m.addProp(csx, csy, cs.canvas, csy + cs.groundY);
-  for (const [lx, ly, lr] of cs.lights) m.addLight(csx + lx, csy + ly, lr, '#ffcf70', 0.55, 1, 0.68);
-  for (const [sx, sy] of cs.smokes) m.smokes.push([csx + sx, csy + sy]);
-  // collision: whole footprint except the doorway
-  const cbx = Math.floor(csx / TS), cby = Math.floor((csy + 30) / TS);
-  const cbw = Math.ceil(cs.canvas.width / TS), cbh = Math.ceil((cs.groundY - 30) / TS);
-  m.blockRect(cbx, cby, cbw, cbh);
-  m.reserve(Math.floor(csx / TS) - 1, Math.floor(csy / TS) - 1,
-            Math.ceil(cs.canvas.width / TS) + 2, Math.ceil(cs.canvas.height / TS) + 2);
-  const doorTX = 41, doorTY = Math.floor((csy + cs.groundY) / TS);
-  m.block(doorTX - 1, doorTY - 1, 0); m.block(doorTX, doorTY - 1, 0); m.block(doorTX + 1, doorTY - 1, 0);
-  m.warps.push({ x: (doorTX - 1) * TS, y: (doorTY - 1) * TS, w: TS * 3, h: TS,
-                 to: 'shop', spawn: true, label: 'Enter the Shop' });
-  // shop-front snow shoveled
-  for (let y = doorTY - 1; y < doorTY + 3; y++) for (let x = doorTX - 4; x <= doorTX + 4; x++) m.set(x, y, 'cobbleBare');
-
-  /* ---- shopfronts facing the square ---- */
-  const shopSpots = [[18, 17, 0], [50, 16, 1], [12, 45, 2]];
-  for (const [tx, ty, si] of shopSpots) {
-    const sf = ART.shopfronts[si];
-    const sx = tx * TS, sy = ty * TS;
-    const shW = Math.round(sf.canvas.width * 1.12), shH = Math.round(sf.canvas.height * 0.4);
-    m.decals.push({ x: sx - Math.round(sf.canvas.width * 0.2),
-                    y: sy + sf.groundY - Math.round(shH * 0.42),
-                    img: PR.castShadow(shW, shH) });
-    m.addProp(sx, sy, sf.canvas, sy + sf.groundY);
-    for (const [lx, ly, lr, lit] of sf.lights)
-      if (lit) m.addLight(sx + lx, sy + ly, lr, '#ffcf70', 0.55, 1, 0.7);
-    for (const [smx, smy] of sf.smokes) m.smokes.push([sx + smx, sy + smy]);
-    const bw = Math.ceil(sf.canvas.width / TS);
-    const bh = Math.max(2, Math.ceil((sf.canvas.height - sf.groundY + 40) / TS));
-    m.blockRect(tx, ty + Math.floor(sf.groundY / TS) - bh, bw, bh);
-    m.reserve(tx - 1, ty - 1, bw + 2, Math.ceil(sf.canvas.height / TS) + 2);
-    // swept threshold
-    const dtx = tx + Math.floor(bw / 2), dty = ty + Math.floor(sf.groundY / TS);
-    for (let y = dty; y < dty + 2; y++) for (let x = dtx - 3; x <= dtx + 3; x++) m.set(x, y, 'cobble');
+    const gy = (BASE_Y - 1) * TS;
+    const px = csTX * TS, py = gy - cs.groundY;
+    m.addProp(px, py, cs.canvas, gy);
+    for (const [lx, ly, lr] of cs.lights) m.addLight(px + lx, py + ly, lr, '#ffcf70', 0.6, 1, 0.72);
+    for (const [sx, sy] of cs.smokes) m.smokes.push([px + sx, py + sy]);
+    const bw = Math.ceil(cs.canvas.width / TS);
+    m.blockRect(csTX, BASE_Y - 1 - Math.ceil((cs.canvas.height - cs.groundY + 50) / TS), bw,
+                Math.ceil((cs.canvas.height - cs.groundY + 50) / TS));
+    m.reserve(csTX - 1, BASE_Y - 1 - Math.ceil(cs.canvas.height / TS) - 1,
+              bw + 2, Math.ceil(cs.canvas.height / TS) + 3);
+    const doorTX = csTX + Math.floor(bw / 2);
+    for (let dx = -1; dx <= 1; dx++) { m.block(doorTX + dx, BASE_Y - 1, 0); m.set(doorTX + dx, VERGE_Y, 'cobble'); }
+    m.fill(csTX, VERGE_Y, bw, 1, 'cobbleBare');
+    m.warps.push({ x: (doorTX - 1) * TS, y: (BASE_Y - 1) * TS, w: TS * 3, h: TS,
+                   to: 'shop', spawn: true, label: 'Enter the Shop' });
+    m.castleDoor = { x: doorTX * TS + 8, y: VERGE_Y * TS + 10 };
   }
 
-  /* ---- townhouses — pulled in tight around the square ---- */
-  const houseSpots = [
-    [22, 22, 0], [53, 21, 1], [17, 33, 2], [58, 32, 3], [26, 44, 4],
-    [50, 45, 5], [12, 24, 3], [66, 24, 4], [31, 15, 1], [62, 43, 2],
-    [10, 43, 5], [70, 36, 0], [36, 12, 4], [46, 12, 3],
-  ];
-  for (const [tx, ty, hi] of houseSpots) {
-    const hs = ART.houses[hi % ART.houses.length];
-    const hx = tx * TS, hy = ty * TS;
-    const shW = Math.round(hs.canvas.width * 1.15), shH = Math.round(hs.canvas.height * 0.46);
-    m.decals.push({ x: hx - Math.round(hs.canvas.width * 0.22),
-                    y: hy + hs.groundY - Math.round(shH * 0.42),
-                    img: PR.castShadow(shW, shH) });
-    m.addProp(hx, hy, hs.canvas, hy + hs.groundY);
-    for (const [lx, ly, lr, lit] of hs.lights) if (lit) m.addLight(hx + lx, hy + ly, lr, '#ffc95e', 0.5, 1, 0.6);
-    for (const [sx, sy] of hs.smokes) m.smokes.push([hx + sx, hy + sy]);
-    const bw = Math.ceil(hs.canvas.width / TS);
-    const fullH = Math.ceil(hs.canvas.height / TS);
-    const bh = Math.max(2, Math.ceil((hs.canvas.height - hs.groundY + 34) / TS));
-    m.blockRect(tx, ty + Math.floor(hs.groundY / TS) - bh, bw, bh);
-    m.reserve(tx - 1, ty - 1, bw + 2, fullH + 2);
-    // trodden snow at the door
-    const dtx = tx + Math.floor(bw / 2), dty = ty + Math.floor(hs.groundY / TS);
-    for (let y = dty; y < dty + 2; y++) for (let x = dtx - 2; x <= dtx + 2; x++) m.set(x, y, 'path');
+  /* ---- masonry kerb with three flush stairs ---- */
+  const stairs = [18, 54, 88];
+  for (let kx = 0; kx < W; kx++) {
+    if (stairs.some(sx => kx >= sx && kx < sx + 2)) {
+      m.set(kx, KERB_Y, 'cobble');
+      continue;
+    }
+    m.addProp(kx * TS, KERB_Y * TS - 8, PR.kerbWall(TS), KERB_Y * TS + TS - 2);
+    m.block(kx, KERB_Y);
   }
 
-  /* ---- fountain ---- */
-  const fo = ART.fountain;
-  const fx = 41 * TS - 23, fy = 33 * TS - 30;
-  m.addProp(fx, fy, fo.canvas, fy + 38, [20]);
-  m.addLight(fx + fo.light[0], fy + fo.light[1], fo.light[2], '#b8c2ec', 0.4, 0, 0.45);
-  m.blockRect(38, 32, 6, 3);
-
-  /* ---- market stalls, benches, woodpiles ---- */
-  const stalls = [[33, 30, 'ruby'], [46, 30, 'teal'], [33, 40, 'gold'], [46, 40, 'plum']];
-  for (const [sx, sy, hue] of stalls) {
-    const img = PR.marketStall(sx, hue);
-    const X = sx * TS - 6, Y = sy * TS - 30;
-    m.addProp(X, Y, img, sy * TS + 14, [17]);
-    m.blockRect(sx, sy, 3, 1);
-    m.addLight(sx * TS + 22, sy * TS - 2, 40, '#ffc06a', 0.45, 1, 0.6);
-  }
-  const benches = [[37, 31], [44, 31], [37, 40], [44, 40], [41, 29], [41, 42]];
-  for (const [bx, by] of benches) {
-    m.addProp(bx * TS, by * TS - 6, PR.bench(), by * TS + 14, [13]);
-    m.blockRect(bx, by, 2, 1);
-  }
-  for (const [wx, wy] of [[30, 33], [52, 37]]) {
-    m.addProp(wx * TS, wy * TS - 4, PR.woodpile(), wy * TS + 14, [10]);
-    m.blockRect(wx, wy, 2, 1);
-  }
-  // drifted snow softening the paving edges
-  for (let i = 0; i < 14; i++) {
-    const a = (i / 14) * Math.PI * 2;
-    const dx2 = pcx + Math.cos(a) * (prx - 0.4), dy2 = pcy + Math.sin(a) * (pry - 0.4);
-    const img = PR.snowDrift(0.55 + hash2(i, 5, 3) * 0.5, i);
-    m.addProp(Math.round(dx2 * TS - img.width / 2), Math.round(dy2 * TS - img.height + 8),
-              img, Math.round(dy2 * TS + 6));
-  }
-
-  /* ---- fences and planters lining the square ---- */
-  for (let i = 0; i < 18; i++) {
-    const a = (i / 18) * Math.PI * 2;
-    const fx2 = Math.round(pcx + Math.cos(a) * (prx + 1.6));
-    const fy2 = Math.round(pcy + Math.sin(a) * (pry + 1.4));
-    if (!m.inb(fx2, fy2) || m.isSolid(fx2, fy2) || m.noTree[m.idx(fx2, fy2)]) continue;
-    if (Math.abs(fx2 - 41) < 4) continue;                       // leave the roads open
-    if (Math.abs(fy2 - 34) < 4 && (fx2 < 8 || fx2 > 72)) continue;
-    if (hash2(i, 7, 3) > 0.45) {
-      m.addProp(fx2 * TS - 8, fy2 * TS - 8, ART.fencePanel[i % 3], fy2 * TS + 12, [13]);
-      m.blockRect(fx2, fy2, 2, 1);
+  /* ---- gaps: mostly closed, roughly one in four a real alley ---- */
+  for (const g of gaps) {
+    if (g.x + g.w >= W - 4) continue;
+    const isAlley = g.w >= 7 || g.i % 4 === 0;
+    if (isAlley) {
+      const lane = g.x + ((g.w / 2) | 0) - 1;
+      for (let y = BASE_Y - 7; y <= BASE_Y; y++) { m.set(lane, y, 'path'); m.set(lane + 1, y, 'path'); }
+      // service clutter on the flanks, never in the lane
+      m.addProp((g.x) * TS, (BASE_Y - 2) * TS - 4, ART.barrel, (BASE_Y - 2) * TS + 14, [7]);
+      m.block(g.x, BASE_Y - 2);
+    } else if (g.w >= 5) {
+      // a treed pocket: closed, but green rather than fenced
+      for (let k = 0; k < 3; k++) {
+        const tx2 = g.x + 1 + ((hash2(g.i, k, 51) * (g.w - 2)) | 0);
+        const ty2 = BASE_Y - 1 - ((hash2(g.i, k, 52) * 5) | 0);
+        if (m.isSolid(tx2, ty2)) continue;
+        const img = ART.pine[(hash2(g.i, k, 53) * ART.pine.length) | 0];
+        m.addProp(tx2 * TS - ((img.width - TS) >> 1), ty2 * TS - img.height + TS, img,
+                  ty2 * TS + TS, [Math.round(img.width * 0.26)]);
+        m.block(tx2, ty2);
+      }
+      const bush = ART.bush[g.i % 3];
+      m.addProp((g.x + 1) * TS, BASE_Y * TS - bush.height + 10, bush, BASE_Y * TS + 8, [9]);
     } else {
-      m.addProp(fx2 * TS - 5, fy2 * TS - 10, ART.planter[i % 3], fy2 * TS + 12, [11]);
-      m.block(fx2, fy2);
+      const fy = BASE_Y - 2;
+      for (let fx = g.x; fx < g.x + g.w; fx += 2) {
+        m.addProp(fx * TS, fy * TS - 8, ART.fencePanel[fx % 3], fy * TS + 12, [13]);
+        m.blockRect(fx, fy, 2, 1);
+      }
+      const bush = ART.bush[g.i % 3];
+      m.addProp(g.x * TS, BASE_Y * TS - bush.height + 10, bush, BASE_Y * TS + 8, [9]);
+      if (g.w >= 5) {
+        m.addProp((g.x + g.w - 2) * TS, (BASE_Y - 1) * TS - 4, ART.barrel, (BASE_Y - 1) * TS + 14, [7]);
+        m.block(g.x + g.w - 2, BASE_Y - 1);
+      }
     }
   }
 
-  /* ---- lamp posts ---- */
-  const lamps = [[31, 26], [51, 26], [31, 44], [51, 44], [41, 24], [41, 46],
-                 [26, 35], [56, 35], [12, 34], [72, 34], [41, 14], [41, 56],
-                 [34, 28], [48, 28], [34, 42], [48, 42], [22, 30], [60, 30],
-                 [22, 40], [60, 40], [41, 20], [41, 50]];
-  for (const [lx, ly] of lamps) {
-    const X = lx * TS, Y = ly * TS - 40;
-    m.addProp(X, Y, ART.lamp.canvas, Y + 54, [6]);
+  /* ---- lamps at the gap corners, on the verge, heads all on one row ---- */
+  const placed = [];
+  for (const lx of lamps) {
+    if (lx < 2 || lx > W - 3) continue;
+    if (placed.some(px2 => Math.abs(px2 - lx) < 5)) continue;
+    placed.push(lx);
+    const X = lx * TS, Y = VERGE_Y * TS - 40;
+    m.addProp(X, Y, ART.lamp.canvas, VERGE_Y * TS + 12, [6]);
     m.addLight(X + ART.lamp.light[0], Y + ART.lamp.light[1], ART.lamp.light[2], '#ffc75e', 0.42, 1, 0.62);
-    m.block(lx, ly, 1);
+    m.block(lx, VERGE_Y);
   }
 
-  /* ---- trees, bushes, fences ---- */
-  for (let i = 0; i < 340; i++) {
-    const tx = ((hash2(i, 1, 3) * W) | 0), ty = ((hash2(i, 2, 4) * H) | 0);
-    if (tx < 2 || ty < 2 || tx > W - 3 || ty > H - 3) continue;
+  /* ---- furniture clusters along the lower kerb: planter, bench, lamp ---- */
+  for (let cx = 10; cx < W - 12; cx += 14 + ((hash2(cx, 3, 5) * 5) | 0)) {
+    const cy = LOW_Y + 1;
+    m.addProp(cx * TS - 5, cy * TS - 10, ART.planter[cx % 3], cy * TS + 12, [11]);
+    m.block(cx, cy);
+    m.addProp((cx + 2) * TS, cy * TS - 6, PR.bench(), cy * TS + 14, [13]);
+    m.blockRect(cx + 2, cy, 2, 1);
+    if (hash2(cx, 7, 9) > 0.5) {
+      const sx = cx + 5;
+      m.addProp(sx * TS - 6, (cy + 1) * TS - 30, PR.marketStall(sx, ['ruby', 'teal', 'gold'][sx % 3]),
+                (cy + 1) * TS + 14, [17]);
+      m.blockRect(sx, cy + 1, 3, 1);
+      m.addLight(sx * TS + 22, (cy + 1) * TS - 2, 34, '#ffc06a', 0.4, 1, 0.55);
+    }
+  }
+  // greenery breaking up the carriageway, always against something
+  for (let gx = 6; gx < W - 6; gx += 5 + ((hash2(gx, 5, 61) * 6) | 0)) {
+    const gy = LOW_Y + LOW_H - 1;
+    if (m.isSolid(gx, gy)) continue;
+    if (hash2(gx, 6, 62) > 0.5) {
+      const bush = ART.bush[gx % 3];
+      m.addProp(gx * TS - 2, gy * TS - bush.height + 12, bush, gy * TS + 10, [9]);
+    } else {
+      m.addProp(gx * TS - 5, gy * TS - 10, ART.planter[gx % 3], gy * TS + 12, [11]);
+      m.block(gx, gy);
+    }
+  }
+
+  // snow banks against the kerb face and every fence run
+  for (let dx = 3; dx < W - 3; dx += 3) {
+    if (hash2(dx, 11, 3) < 0.45) continue;
+    const img = PR.snowDrift(0.5 + hash2(dx, 12, 4) * 0.5, dx);
+    m.addProp(dx * TS - (img.width >> 1), LOW_Y * TS - img.height + 6, img, LOW_Y * TS + 4);
+  }
+
+  /* ---- trees crowd right up to the corridor ---- */
+  for (let i2 = 0; i2 < 1400; i2++) {
+    const tx = ((hash2(i2, 1, 3) * W) | 0), ty = ((hash2(i2, 2, 4) * H) | 0);
+    if (tx < 1 || ty < 1 || tx > W - 2 || ty > H - 2) continue;
+    // a crown is ~7 tiles tall, so exclude far enough below that no tree
+    // planted under the street can reach up into it
+    if (ty >= BASE_Y - 1 && ty <= LOW_Y + LOW_H + 7) continue;
     if (m.ground[m.idx(tx, ty)] !== 'snow') continue;
     if (m.isSolid(tx, ty) || m.noTree[m.idx(tx, ty)]) continue;
-    // keep the square itself clear, but let trees crowd right up to its rim
-    const dxp = (tx - 41) / 11, dyp = (ty - 35) / 8;
-    if (dxp * dxp + dyp * dyp < 1) continue;
-    const roll = hash2(i, 3, 5);
-    if (roll < 0.55) {
-      const img = ART.pine[(hash2(i, 4, 6) * ART.pine.length) | 0];
-      m.addProp(tx * TS - ((img.width - TS) >> 1), ty * TS - img.height + TS, img, ty * TS + TS, [Math.round(img.width * 0.28)]);
-      m.block(tx, ty);
-    } else if (roll < 0.72) {
-      const img = ART.bare[(hash2(i, 5, 7) * 4) | 0];
-      m.addProp(tx * TS - ((img.width - TS) >> 1), ty * TS - img.height + TS, img, ty * TS + TS, [Math.round(img.width * 0.22)]);
-      m.block(tx, ty);
-    } else if (roll < 0.9) {
-      const img = ART.bush[(hash2(i, 6, 8) * 3) | 0];
-      m.addProp(tx * TS - 2, ty * TS - img.height + TS, img, ty * TS + TS, [Math.round(img.width * 0.3)]);
-    } else {
-      const img = ART.rock[(hash2(i, 7, 9) * 3) | 0];
-      m.addProp(tx * TS - 1, ty * TS - img.height + TS, img, ty * TS + TS, [Math.round(img.width * 0.4)]);
-      m.block(tx, ty);
-    }
+    const roll = hash2(i2, 3, 5);
+    let img;
+    if (roll < 0.68) img = ART.pine[(hash2(i2, 4, 6) * ART.pine.length) | 0];
+    else if (roll < 0.86) img = ART.bare[(hash2(i2, 5, 7) * 4) | 0];
+    else if (roll < 0.95) img = ART.bush[(hash2(i2, 6, 8) * 3) | 0];
+    else img = ART.rock[(hash2(i2, 7, 9) * 3) | 0];
+    m.addProp(tx * TS - ((img.width - TS) >> 1), ty * TS - img.height + TS, img,
+              ty * TS + TS, [Math.round(img.width * 0.26)]);
+    if (roll < 0.86 || roll >= 0.95) m.block(tx, ty);
   }
 
-  // plaza dressing: crates + barrels near a stall
-  m.addProp(28 * TS, 28 * TS - 4, ART.barrel, 28 * TS + 16, [7]); m.block(28, 28);
-  m.addProp(29 * TS + 4, 29 * TS, ART.crate, 29 * TS + 16, [7]); m.block(29, 29);
-  m.addProp(53 * TS, 41 * TS - 4, ART.barrel, 41 * TS + 16, [7]); m.block(53, 41);
-
-  /* ---- vendors: the dairy and the exchange ---- */
-  m.interact.push({ x: 33 * TS, y: 30 * TS, w: TS * 3, h: TS * 2,
+  /* ---- vendors sit on the lower level, facing the street ---- */
+  m.interact.push({ x: 24 * TS, y: LOW_Y * TS, w: TS * 4, h: TS * 3,
                     type: 'vendor', vendorId: 'dairy', label: "Poppy's Dairy" });
-  m.interact.push({ x: 46 * TS, y: 30 * TS, w: TS * 3, h: TS * 2,
+  m.interact.push({ x: 70 * TS, y: LOW_Y * TS, w: TS * 4, h: TS * 3,
                     type: 'vendor', vendorId: 'general', label: 'The Hollow Exchange' });
 
-  /* ---- street clutter away from the square ---- */
-  for (let i = 0; i < 34; i++) {
-    const tx = 4 + ((hash2(i, 61, 3) * (W - 8)) | 0);
-    const ty = 6 + ((hash2(i, 62, 4) * (H - 12)) | 0);
-    if (!m.inb(tx, ty) || m.isSolid(tx, ty) || m.noTree[m.idx(tx, ty)]) continue;
-    const dxp = (tx - 41) / 12, dyp = (ty - 35) / 9;
-    if (dxp * dxp + dyp * dyp < 1) continue;
-    const roll = hash2(i, 63, 5);
-    if (roll < 0.3) {
-      m.addProp(tx * TS - 8, ty * TS - 8, ART.fencePanel[i % 3], ty * TS + 12, [13]);
-      m.blockRect(tx, ty, 2, 1);
-    } else if (roll < 0.55) {
-      m.addProp(tx * TS - 5, ty * TS - 10, ART.planter[i % 3], ty * TS + 12, [11]);
-      m.block(tx, ty);
-    } else if (roll < 0.72) {
-      m.addProp(tx * TS, ty * TS - 4, ART.barrel, ty * TS + 14, [7]);
-      m.block(tx, ty);
-    } else if (roll < 0.86) {
-      m.addProp(tx * TS, ty * TS, ART.crate, ty * TS + 14, [7]);
-      m.block(tx, ty);
-    } else {
-      m.addProp(tx * TS - 6, ty * TS - 6, PR.bench(), ty * TS + 14, [13]);
-      m.blockRect(tx, ty, 2, 1);
-    }
+  /* ---- the grove is off the east end of the street ---- */
+  m.warps.push({ x: (W - 1) * TS, y: LOW_Y * TS, w: TS, h: TS * LOW_H,
+                 to: 'grove', tx: 3 * TS, ty: 24 * TS, label: 'Hollow Grove' });
+  for (let y = LOW_Y; y < LOW_Y + LOW_H; y++) m.block(W - 1, y, 0);
+
+  /* ---- edges ---- */
+  for (let x2 = 0; x2 < W; x2++) { m.block(x2, 0); m.block(x2, H - 1); }
+  for (let y = 0; y < H; y++) {
+    m.block(0, y);
+    if (!(y >= LOW_Y && y < LOW_Y + LOW_H)) m.block(W - 1, y);
   }
 
-  /* ---- warp east to the grove ---- */
-  m.warps.push({ x: (W - 1) * TS, y: 32 * TS, w: TS, h: TS * 5, to: 'grove', tx: 3 * TS, ty: 24 * TS, label: 'Hollow Grove' });
-  for (let y = 32; y < 37; y++) m.block(W - 1, y, 0);
-
-  // edge walls
-  for (let x = 0; x < W; x++) { m.block(x, 0); m.block(x, 1); m.block(x, H - 1); }
-  for (let y = 0; y < H; y++) { m.block(0, y); m.block(1, y); if (!(y >= 32 && y < 37)) { m.block(W - 1, y); m.block(W - 2, y); } }
-
+  m.spawn = { x: 46 * TS, y: (LOW_Y + 1) * TS };
   m.props.sort((a, b) => a.sy - b.sy);
   return m;
 }
@@ -480,7 +459,7 @@ export function buildShop() {
   /* ---- the porch notch is the way out ---- */
   const doorX = PORCH[0] + 1;
   m.warps.push({ x: PORCH[0] * TS, y: PORCH[1] * TS, w: PORCH[2] * TS, h: TS,
-                 to: 'town', tx: 41 * TS, ty: 0, label: 'Step Outside', anchorTown: true });
+                 to: 'town', anchorTown: true, label: 'Step Outside' });
   m.warps.push({ x: RX0 * TS, y: FY0 * TS, w: TS * 2, h: TS * 2,
                  to: 'kitchen', spawn: true, label: 'The Kitchen' });
   m.interact.push({ x: 24 * TS, y: (LOWY + 2) * TS, w: TS * 2, h: TS * 2,
@@ -613,7 +592,7 @@ export function buildGrove() {
   }
 
   // dense pine border + scattered interior
-  for (let i = 0; i < 780; i++) {
+  for (let i = 0; i < 620; i++) {
     const tx = ((hash2(i, 11, 3) * W) | 0), ty = ((hash2(i, 12, 4) * H) | 0);
     if (!m.inb(tx, ty) || m.isSolid(tx, ty)) continue;
     const edge = tx < 5 || ty < 4 || tx > W - 6 || ty > H - 5;

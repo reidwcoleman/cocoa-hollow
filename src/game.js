@@ -560,7 +560,10 @@ export class Game {
     if (!h) return;
     if (h.kind === 'warp') {
       const w = h.data;
-      if (w.spawn) {
+      if (w.anchorTown && this.maps.town.castleDoor) {
+        const d = this.maps.town.castleDoor;
+        this.setMap('town', d.x, d.y);
+      } else if (w.spawn) {
         this.setMap(w.to);
       } else {
         let tx = w.tx, ty = w.ty;

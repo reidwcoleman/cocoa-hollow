@@ -26,7 +26,7 @@ python3 server.py 4780      # then open http://127.0.0.1:4780/
 | `M` | journal |
 | `Esc` | menu |
 
-**The loop.** Head east from the square into the Hollow Grove. Gather cocoa
+**The loop.** Head east along Hollow Street into the Grove. Gather cocoa
 pods, moonberries, gloomcaps and spirit salt; kill what tries to stop you. Take
 it back to the castle kitchen, pick a recipe at a cauldron, and hit the gold
 band in the tempering minigame for a star-rated batch. Stock your display
@@ -83,7 +83,7 @@ src/
   systems/
     lighting.js     multiplied ambient darkness + additive warm bloom
     particles.js    snowfall, smoke, bursts, floating text
-  world/maps.js     the town, shop, kitchen and grove
+  world/maps.js     the street, shop, kitchen and grove
   entities.js       player, enemies, boss, townsfolk, ghosts, customers
   data.js           ingredients, recipes, townsfolk, vendors
   gear.js           weapons, build-defining off-hands, bows, loot tables

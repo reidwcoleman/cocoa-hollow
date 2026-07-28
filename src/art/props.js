@@ -214,18 +214,26 @@ export function shopfront(opts = {}) {
     const xl = cx - (w / 2 + eave), xr = cx + (w / 2 + eave);
     for (let y = 0; y < depthRun; y++) {
       const t = y / (depthRun - 1);                    // 0 far end, 1 at apex
-      const course = y % 5;                            // exposure compresses with distance
+      // 5px course exposure with a half-course offset, and every shingle gets a
+      // lit top edge and a dark butt — flat bands read as a painted slab
+      const course = y % 5;
+      const band = (y / 5) | 0;
       for (let x = xl; x <= xr; x++) {
         const right = x > cx;
-        // the right-hand plane sits exactly one step lighter — this is what
-        // sells the pitch of the roof
-        let shade = course === 0 ? 2 : course < 3 ? 1 : 0;
+        const sx = x + (band % 2 ? 6 : 0);
+        const within = ((sx % 12) + 12) % 12;
+        let shade = course === 0 ? 3 : course === 1 ? 2 : course < 4 ? 1 : 0;
+        if (within === 0) shade = 0;                  // vertical joint between tiles
         if (right) shade = Math.min(4, shade + 1);
-        p.px(x, y, ROOF[shade]);
+        p.px(x, y, ROOF[Math.max(0, shade)]);
       }
-      // compressed scallop hints rather than full arcs at this distance
-      if (course === 0)
-        for (let x = xl + (y % 10 < 5 ? 0 : 3); x <= xr; x += 6) p.px(x, y, ROOF[right0(x, cx) ? 2 : 0]);
+      // a weathered tile roughly one in seven
+      if (course === 1)
+        for (let x = xl; x <= xr; x += 12)
+          if (hash2(x, band + seed, 55) > 0.72) {
+            const t2 = hash2(x, band, 56) > 0.5 ? 4 : 0;
+            for (let k = 0; k < 11 && x + k <= xr; k++) p.px(x + k, y, ROOF[t2]);
+          }
       // snow lies heaviest at the far end and along the ridge
       // patchy snow — the shingles must stay visible or the roof dissolves
       // into the snowfield behind it
@@ -649,7 +657,7 @@ export function castleShop() {
  * cone looks like a Christmas-tree icon instead of a tree.
  */
 export function pineTree(size = 1, snowy = true, seed = 1, hue = 'pine') {
-  const w = Math.round(58 * size), h = Math.round(112 * size);
+  const w = Math.round(66 * size), h = Math.round(112 * size);
   const p = new P(w, h);
   const cx = w >> 1;
   const PN = R[hue] || R.pine;
@@ -680,8 +688,9 @@ export function pineTree(size = 1, snowy = true, seed = 1, hue = 'pine') {
   const top = Math.round(h * 0.045);
   for (let t = 0; t < tiers; t++) {
     const f = t / (tiers - 1);                       // 0 at top, 1 at base
-    const ty = top + Math.round(f * (h - trunkH - top + 8) * 0.74);
-    const rad = Math.max(3, Math.round((w / 2 - 2) * Math.pow(f, 0.72)));
+    const ty = top + Math.round(f * (h - trunkH - top + 8) * 0.74)
+             + Math.round((hash2(t, seed, 23) - 0.5) * 5);
+    const rad = Math.max(3, Math.round((w / 2 - 2) * Math.pow(f, 0.62)));
     const jitter = (hash2(t, seed, 11) - 0.5) * 3;
 
     // Each tier is drawn column by column down to a *ragged* skirt line. The
@@ -702,13 +711,15 @@ export function pineTree(size = 1, snowy = true, seed = 1, hue = 'pine') {
       for (let y = colTop; y <= colBottom; y++) {
         const v = (y - colTop) / Math.max(1, colBottom - colTop);
         // lit on the upper-left, shadow gathering under and to the right
-        let shade = v < 0.34 ? 3 : v < 0.7 ? 2 : 1;
-        if (n < -rad * 0.15 && v < 0.55) shade = Math.min(4, shade + 1);
-        if (n > rad * 0.4) shade = Math.max(0, shade - 1);
+        // use the full ramp — clamping to the top three steps left the frosted
+        // variants as flat white cones with no needle structure
+        let shade = v < 0.28 ? 4 : v < 0.52 ? 3 : v < 0.78 ? 2 : 1;
+        if (n < -rad * 0.15 && v < 0.45) shade = Math.min(4, shade + 1);
+        if (n > rad * 0.42) shade = Math.max(0, shade - 1);
         p.px(x, y, PN[shade]);
       }
       // dark lip along the underside
-      p.px(x, colBottom, PN[0]);
+      p.px(x, colBottom, PN[1]);
       // needles poking past the silhouette
       if (hash2(n, t + seed * 5, 13) > 0.6)
         tuft(x, colBottom - 1, 2, n < 0 ? -1 : 1, 1);
@@ -1458,15 +1469,65 @@ export function roomFrameFromMask(w, h, inside) {
 export function terraceRiser(w, hue = 'warm') {
   const T = hue === 'cool'
     ? ['#7a6ad0', '#5f51ab', '#4a3e8c', '#3d3374', '#1d1840']
+    : hue === 'stone'
+    ? ['#d8daff', '#8290e2', '#5f6fc4', '#3f4a92', '#1b2050']
     : ['#bc592b', '#99462a', '#7c352a', '#6b352a', '#3f2019'];
   const p = new P(w, 9);
-  p.rect(0, 0, w, 1, T[0]);            // nosing catches the light
+  p.rect(0, 0, w, 1, T[0]);            // nosing / coping catches the light
   p.rect(0, 1, w, 3, T[1]);
   p.rect(0, 4, w, 3, T[2]);
   p.rect(0, 7, w, 1, T[3]);
   p.rect(0, 8, w, 1, T[4]);            // contact line
-  for (let x = 3; x < w - 3; x += 7)
-    if (hash2(x, 5, 71) > 0.5) p.px(x, 3, T[1]);
+  if (hue === 'stone') {
+    // running-bond blocks in the wall face, with a snow ridge on the coping
+    p.rect(0, 0, w, 2, T[0]);
+    p.rect(0, 2, w, 1, T[2]);
+    for (let x = 0; x < w; x++) {
+      const row = 3;
+      if ((x + 8) % 16 === 0) p.rect(x, row, 1, 3, T[3]);
+      if ((x + 0) % 16 === 0) p.rect(x, row + 3, 1, 3, T[3]);
+    }
+    p.rect(0, 5, w, 1, T[3]);
+    for (let x = 2; x < w - 2; x += 24)
+      if (hash2(x, 9, 73) > 0.55) { p.px(x, 4, T[1]); p.px(x + 1, 6, T[1]); }
+    p.rect(0, 0, w, 1, '#eef1ff');     // snow lies along every coping
+  } else {
+    for (let x = 3; x < w - 3; x += 7)
+      if (hash2(x, 5, 71) > 0.5) p.px(x, 3, T[1]);
+  }
+  return p.canvas;
+}
+
+/**
+ * Retaining wall between two street levels: a lighter coping band on top and
+ * about a tile and a half of running-bond masonry face below. Tall enough to
+ * read as a level change rather than a painted line.
+ */
+export function kerbWall(w) {
+  const h = 24;
+  const p = new P(w, h);
+  const S = R.stone;
+  // coping
+  p.rect(0, 0, w, 2, S[4]);
+  p.rect(0, 0, w, 1, '#eef1ff');           // snow lies along it
+  p.rect(0, 2, w, 1, S[2]);
+  // face
+  p.rect(0, 3, w, h - 5, S[1]);
+  for (let ry = 3; ry < h - 2; ry += 5) {
+    const off = ((ry / 5) | 0) % 2 ? 8 : 0;
+    for (let bx = -16; bx < w; bx += 16) {
+      const x = bx + off;
+      const b = 1 + Math.round(hash2(x, ry, 81) * 1.4);
+      p.rect(x + 1, ry, 14, 4, S[Math.max(0, Math.min(3, b))]);
+      p.hline(x + 1, ry, 14, S[Math.min(4, b + 1)]);
+    }
+    p.hline(0, ry + 4, w, S[0]);
+  }
+  // diagonal inset panel every so often
+  for (let px2 = 6; px2 < w - 10; px2 += 160)
+    for (let k = 0; k < 8; k++) { p.px(px2 + k, 6 + k, S[3]); p.px(px2 + 8 - k, 6 + k, S[3]); }
+  // base shadow and drifted snow at the foot
+  p.rect(0, h - 2, w, 2, '#1b2050');
   return p.canvas;
 }
 

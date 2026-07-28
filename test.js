@@ -519,8 +519,11 @@ check('every warp lands somewhere you can stand', () => {
         assert(dest.spawn, `${id} -> ${w.to} asks for a spawn the map does not define`);
         x = dest.spawn.x; y = dest.spawn.y;
       } else {
-        x = w.tx; y = w.ty;
-        if (w.anchorTown) y = G.maps.town.warps[0].y + TS + 6;
+        if (w.anchorTown) {
+          const d = G.maps.town.castleDoor;
+          assert(d, 'town does not publish a castle threshold');
+          x = d.x; y = d.y;
+        } else { x = w.tx; y = w.ty; }
       }
       const tx = Math.floor(x / TS), ty = Math.floor(y / TS);
       const inBounds = tx >= 0 && ty >= 0 && tx < dest.w && ty < dest.h;
