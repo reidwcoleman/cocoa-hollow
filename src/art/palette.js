@@ -11,42 +11,42 @@ export const RAMP = {
   void:    ['#050212', '#0a0620', '#120c32', '#1a1245', '#241a5c'],
   night:   ['#020044', '#0c2bc3', '#1f0a9f', '#2836d6', '#4050d7'],
   violet:  ['#1f0a4a', '#341570', '#4a2496', '#6039bd', '#7f57dd'],
-  moon:    ['#4f77eb', '#8fa6ff', '#b1adfe', '#d8d6fb', '#ffffff'],
+  moon:    ['#1f24e4', '#6a6ff7', '#9f90f6', '#c9c5f3', '#f7f7f7'],
 
   // --- snow & stone ---
-  snow:    ['#3a44c0', '#6082ff', '#96a8ff', '#c9c7ff', '#e6e8ff'],
-  stone:   ['#3f4a92', '#5f6fc4', '#8290e2', '#a7b0f2', '#cdd2ff'],
+  snow:    ['#2a00ba', '#1c18f7', '#6469f7', '#aea9f7', '#d4d7f7'],
+  stone:   ['#202e8b', '#394dba', '#5c6ed7', '#8691e6', '#b2b9f2'],
   // paving is brighter than the snow it sits in — pale periwinkle flags
-  pave:    ['#7c86d8', '#a3aaf0', '#c4c6fb', '#d8daff', '#eef1ff'],
+  pave:    ['#525fcb', '#7c85e2', '#a4a6ec', '#bcbff0', '#d9ddf0'],
   // the lower carriageway sits a clear step darker than the upper walk,
   // so two adjacent paved strips never read as one poured sheet
-  paveLow: ['#4a5397', '#6570bd', '#8089d8', '#99a0e8', '#b3b9f3'],
-  brick:   ['#3b1f3f', '#5a2f52', '#7a4468', '#9a5c80', '#b87a9c'],
+  paveLow: ['#2c388e', '#4250b2', '#5b67cb', '#767fda', '#939be4'],
+  brick:   ['#38163c', '#56234d', '#753460', '#944975', '#b1668f'],
   // building facades read dark violet under bright blue roof planes
-  masonry: ['#0d0023', '#1f155d', '#382c70', '#4d4071', '#634d7e'],
+  masonry: ['#0c0021', '#0f0358', '#281a6a', '#41316b', '#583e78'],
   // snow lying on a roof picks up more lavender than snow on the ground
-  snowRoof:['#7da8ff', '#a1bbff', '#c7b7ff', '#d2c4ff', '#e6ddff'],
+  snowRoof:['#3f7af2', '#7195f2', '#a58ff2', '#b4a1f2', '#d0c3f2'],
   lampPost:['#06210f', '#0f3a1c', '#236a2f', '#009769', '#48d49a'],
   // shop roofs sit lighter and cooler than house roofs
-  roofSlate:['#1e41d3', '#4575ff', '#74a9ff', '#a3bdff', '#cfdcff'],
+  roofSlate:['#0026c6', '#0c47f0', '#4687f0', '#7f9ff0', '#b5c5f0'],
   // warm olive river-rock for gable ends, against the cold roof
-  river:   ['#2a2419', '#463c2c', '#5d5039', '#7a6a4a', '#9b8a63'],
+  river:   ['#282113', '#433723', '#59492c', '#756139', '#95804f'],
   // interior room frame moulding, and the black it floats on
-  frameWood:['#120301', '#210c12', '#4d2513', '#70391b', '#9a5f30'],
-  roomBrick:['#160b0e', '#331818', '#5f1921', '#7f2222', '#a3453a'],
-  boards:  ['#2d1410', '#43221a', '#5a3226', '#744433', '#8f5a42'],
+  frameWood:['#120200', '#20010a', '#4b1700', '#6e2700', '#974400'],
+  roomBrick:['#150409', '#310707', '#5b000b', '#7a0000', '#9c1100'],
+  boards:  ['#2a0600', '#3f0c01', '#551804', '#6d240a', '#863511'],
   slate:   ['#181546', '#241d68', '#33298c', '#4438ad', '#5a4dcc'],
 
   // --- wood & interior ---
-  wood:    ['#241009', '#3e1e17', '#4a251b', '#622d1f', '#8c4521'],
-  oak:     ['#331818', '#572a1e', '#70391b', '#9e5b37', '#c16d43'],
-  floor:   ['#2a1116', '#42201f', '#5a2c26', '#743c31', '#8f5340'],
+  wood:    ['#240b02', '#3e160d', '#4a1c0f', '#62200e', '#8c3306'],
+  oak:     ['#331212', '#572011', '#702d08', '#9e4c20', '#c15b27'],
+  floor:   ['#2a0910', '#421615', '#5a1e16', '#742b1d', '#8f4128'],
 
   // --- chocolate ---
   cocoa:   ['#1d0f0c', '#301813', '#46241a', '#5e3324', '#7a4630'],
   milk:    ['#3c2116', '#5a3220', '#7b482c', '#9c633e', '#bf8354'],
   white:   ['#6b4f34', '#8d6c48', '#b08f63', '#d1b48a', '#eddbb6'],
-  ruby:    ['#3c1020', '#5a1a30', '#7d2842', '#a33c58', '#c85a73'],
+  ruby:    ['#3c0b1d', '#5a122b', '#7d1e3b', '#a3304f', '#c84d69'],
   caramel: ['#4a2510', '#6e3a17', '#94551f', '#bb7430', '#dd9c4c'],
 
   // --- light & fire ---
@@ -60,12 +60,12 @@ export const RAMP = {
   toxic:   ['#123a2a', '#1c5c3f', '#2a8657', '#48b477', '#7fe0a4'],
 
   // --- flora ---
-  pine:    ['#00062f', '#001a4d', '#003b73', '#1e7ab3', '#52a5f3'],
+  pine:    ['#0b002f', '#00004d', '#001c73', '#0f5eb3', '#4291f3'],
   // a mintier conifer so a stand of trees isn't all one hue
-  pineB:   ['#063a44', '#0d6a70', '#1a9a95', '#3fc4b4', '#7ee6d2'],
-  pineC:   ['#132258', '#24409c', '#3b68d8', '#6f9bf5', '#b3cbff'],
+  pineB:   ['#003641', '#00646a', '#00928d', '#1cbaa7', '#5fdac3'],
+  pineC:   ['#110051', '#190090', '#0d04c7', '#3b51e1', '#8ca0eb'],
   // a frosted conifer that reads almost white against the snow
-  pineD:   ['#26356e', '#4a63ac', '#7f9adc', '#b3c8f4', '#e6efff'],
+  pineD:   ['#130061', '#100097', '#2629c2', '#6a7ed7', '#b7c3e0'],
   bark:    ['#1e1020', '#3a2020', '#5a3324', '#7c4a2c', '#a06a3e'],
   leaf:    ['#062b3a', '#0d4a5e', '#166f84', '#2b96b0', '#57bcd0'],
 
@@ -75,9 +75,9 @@ export const RAMP = {
   skinC:   ['#5a3520', '#7d4e2e', '#a06b41', '#c08e5c', '#dbb183'],
 
   // --- fabric ---
-  plum:    ['#0b0c89', '#1e41d3', '#4575ff', '#759eff', '#c7b7ff'],
-  teal:    ['#04303a', '#0a5560', '#107a86', '#2ba0aa', '#4fc6ce'],
-  rose:    ['#3d1524', '#5c2135', '#803049', '#a4475f', '#c66a7c'],
+  plum:    ['#000189', '#032bd3', '#2960ff', '#608fff', '#bfacff'],
+  teal:    ['#002f3a', '#005460', '#007886', '#189eaa', '#3cc5ce'],
+  rose:    ['#3d0f20', '#5c182f', '#802441', '#a43955', '#c65c71'],
   gold:    ['#54380c', '#7d5514', '#a87a20', '#d0a437', '#f0cc6a'],
   cream:   ['#6b5a4a', '#8f7a64', '#b39c82', '#d4c1a6', '#f2e6d0'],
   ink:     ['#08040f', '#12061e', '#1c0f30', '#2a1a48', '#3d2a64'],

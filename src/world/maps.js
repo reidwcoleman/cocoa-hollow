@@ -60,11 +60,12 @@ export function buildArt() {
   ART.lamp = PR.lampPost();
   ART.fountain = PR.fountain();
   ART.pine = [
-    PR.pineTree(0.95, true, 1, 'pine'),  PR.pineTree(1.20, true, 2, 'pineB'),
+    PR.pineTree(0.95, true, 1, 'pineB'), PR.pineTree(1.20, true, 2, 'pineB'),
     PR.pineTree(0.75, true, 3, 'pineD'), PR.pineTree(1.05, true, 4, 'pineC'),
-    PR.pineTree(0.62, true, 5, 'pineB'), PR.pineTree(1.35, true, 6, 'pineD'),
-    PR.pineTree(0.88, true, 7, 'pineC'), PR.pineTree(1.12, true, 8, 'pine'),
+    PR.pineTree(0.62, true, 5, 'pineB'), PR.pineTree(1.35, true, 6, 'pine'),
+    PR.pineTree(0.88, true, 7, 'pineC'), PR.pineTree(1.12, true, 8, 'pineB'),
     PR.pineTree(1.00, true, 9, 'pineD'), PR.pineTree(0.82, true, 10, 'pineB'),
+    PR.pineTree(1.08, true, 11, 'pineB'),PR.pineTree(0.90, true, 12, 'pineC'),
   ];
   ART.pineBare = [PR.pineTree(1.0, false, 5), PR.pineTree(1.2, false, 6)];
   ART.bare = [PR.bareTree(1), PR.bareTree(2), PR.bareTree(3), PR.bareTree(4)];
@@ -435,7 +436,7 @@ export function buildShop() {
   // sized to the viewport is the thing that reads as a placeholder.
   const W = 30, H = 17;
   const m = new GameMap('shop', W, H, { base: 'void', indoor: true, name: 'The Cocoa Hollow' });
-  m.ambient = { key: 'night', amount: 0.30, tint: '#a06a50', bloom: 0.55, vignetteAmt: 0.10 };
+  m.ambient = { key: 'night', amount: 0.52, tint: '#a06a50', bloom: 0.5, vignetteAmt: 0.10 };
 
   const UPPER = [2, 2, 24, 7];       // x, y, w, h in tiles
   const LOWER = [9, 9, 17, 5];
@@ -514,7 +515,7 @@ export function buildShop() {
 export function buildKitchen() {
   const W = 30, H = 17;
   const m = new GameMap('kitchen', W, H, { base: 'void', indoor: true, name: 'The Food Laboratory' });
-  m.ambient = { key: 'deep', amount: 0.40, tint: '#7a4aff', bloom: 0.6, vignetteAmt: 0.10 };
+  m.ambient = { key: 'deep', amount: 0.56, tint: '#7a4aff', bloom: 0.55, vignetteAmt: 0.10 };
 
   // a working hall with an alcove stepping out to the right and a stair landing
   const HALL  = [3, 2, 20, 8];
@@ -598,7 +599,7 @@ export function buildKitchen() {
 export function buildGrove() {
   const W = 76, H = 52;
   const m = new GameMap('grove', W, H, { base: 'snow', name: 'The Hollow Grove' });
-  m.ambient = { key: 'night', amount: 0.20, tint: '#3a52ff', bloom: 0.7, vignetteAmt: 0.06 };
+  m.ambient = { key: 'night', amount: 0.30, tint: '#3a52ff', bloom: 0.62, vignetteAmt: 0.06 };
 
   // deep snow, with bare ground only where the canopy is thickest
   for (let y = 0; y < H; y++)
@@ -626,11 +627,11 @@ export function buildGrove() {
   }
 
   // dense pine border + scattered interior
-  for (let i = 0; i < 620; i++) {
+  for (let i = 0; i < 900; i++) {
     const tx = ((hash2(i, 11, 3) * W) | 0), ty = ((hash2(i, 12, 4) * H) | 0);
     if (!m.inb(tx, ty) || m.isSolid(tx, ty)) continue;
     const edge = tx < 5 || ty < 4 || tx > W - 6 || ty > H - 5;
-    const dense = edge || hash2(i, 13, 5) < 0.72;
+    const dense = edge || hash2(i, 13, 5) < 0.86;
     if (!dense) continue;
     if (m.ground[m.idx(tx, ty)] === 'path' && !edge) continue;
     const roll = hash2(i, 14, 6);

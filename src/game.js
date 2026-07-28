@@ -1070,9 +1070,9 @@ export class Game {
     this.lighting.render(g, key, {
       amount: amb.amount != null ? amb.amount : undefined,
       tint: amb.tint,
-      bloom: amb.bloom != null ? amb.bloom : 0.8,
+      bloom: amb.bloom != null ? amb.bloom : 0.62,
       vignetteAmt: amb.vignetteAmt != null ? amb.vignetteAmt : 0.06,
-      gradeAmt: map.indoor ? 0.04 : 0.04,
+      gradeAmt: map.indoor ? 0.02 : 0.02,
       gradeCol: map.indoor ? '#6a4a80' : '#5a6ab4',
     });
 
