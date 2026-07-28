@@ -3,7 +3,7 @@
 
 import { P, makeCanvas, outline, hash2, fnoise, crop } from './pixel.js';
 import { RAMP, mix, C } from './palette.js';
-import { drawText } from './font.js';
+import { drawText, textWidth } from './font.js';
 
 const R = RAMP;
 
@@ -39,17 +39,26 @@ export function townhouse(opts = {}) {
   const lights = [], smokes = [];
 
   /* ---------------- facade ---------------- */
-  p.rect(OX, facY, w, facH, WALL[3]);
-  for (let y = facY; y < baseY; y++)
-    for (let x = OX; x < OX + w; x++) {
-      const n = fnoise(x / 7, y / 7, seed);
-      if (n > 0.64) p.px(x, y, WALL[4]);
-      else if (n < 0.36) p.px(x, y, WALL[2]);
+  // Every stone is drawn as its own unit across the full ramp. A single-hue
+  // wall with mortar lines over it reads as a texture swatch, not masonry.
+  p.rect(OX, facY, w, facH, WALL[1]);
+  for (let y = facY; y < baseY; y += 6) {
+    const row = ((y - facY) / 6) | 0;
+    let x = OX - ((hash2(row, seed, 421) * 10) | 0);
+    while (x < OX + w) {
+      const sw = 8 + ((hash2(x, row + seed, 422) * 7) | 0);
+      const chipped = hash2(x, row + seed, 423) > 0.92;
+      const b = chipped ? 0 : 1 + Math.floor(hash2(x, row + seed, 424) * 4);
+      const x0 = Math.max(OX, x), x1 = Math.min(OX + w, x + sw - 1);
+      if (x1 > x0) {
+        p.rect(x0, y, x1 - x0, 5, WALL[Math.min(4, b)]);
+        p.hline(x0, y, x1 - x0, WALL[Math.min(4, b + 1)]);
+        p.vline(x0, y, 5, WALL[Math.min(4, b + 1)]);
+        p.hline(x0, y + 4, x1 - x0, WALL[Math.max(0, b - 2)]);
+        p.vline(x1 - 1, y, 5, WALL[Math.max(0, b - 2)]);
+      }
+      x += sw;
     }
-  // coursed stone
-  for (let y = facY + 5; y < baseY; y += 6) {
-    p.hline(OX, y, w, WALL[1]);
-    for (let x = OX + (((y / 6) | 0) % 2) * 7; x < OX + w; x += 14) p.vline(x, y - 5, 5, WALL[1]);
   }
   p.rect(OX, facY, 1, facH, WALL[4]);
   p.rect(OX + w - 1, facY, 1, facH, WALL[1]);
@@ -698,37 +707,54 @@ export function pineTree(size = 1, snowy = true, seed = 1, hue = 'pine') {
     // Christmas tree rather than a conifer.
     const depth = Math.max(5, Math.round(rad * 0.95));
     const snowCover = hash2(t, seed, 17) > 0.18;
-    for (let n = -rad; n <= rad; n++) {
-      const a = Math.abs(n) / rad;
-      // a bough droops away from the trunk: both its upper and lower surfaces
-      // slope down as they run out, and both edges are jagged
-      const jagT = Math.round((hash2(n + 40, t + seed * 7, 21) - 0.5) * 2.4);
-      const jagB = Math.round((hash2(n + 90, t + seed * 3, 22) - 0.35) * 3.4);
-      const colTop = ty + Math.round(depth * 0.9 * Math.pow(a, 1.25)) + jagT;
-      const thick = Math.max(2, Math.round(depth * (0.62 - 0.34 * a)));
-      const colBottom = colTop + thick + jagB;
-      const x = cx + n + jitter;
-      for (let y = colTop; y <= colBottom; y++) {
-        const v = (y - colTop) / Math.max(1, colBottom - colTop);
-        // lit on the upper-left, shadow gathering under and to the right
-        // use the full ramp — clamping to the top three steps left the frosted
-        // variants as flat white cones with no needle structure
-        let shade = v < 0.28 ? 4 : v < 0.52 ? 3 : v < 0.78 ? 2 : 1;
-        if (n < -rad * 0.15 && v < 0.45) shade = Math.min(4, shade + 1);
-        if (n > rad * 0.42) shade = Math.max(0, shade - 1);
-        p.px(x, y, PN[shade]);
+    // Foliage is STAMPED, not filled. Walking the tier and emitting overlapping
+    // needle clumps — instead of filling each column between two curves — is
+    // what produces high-frequency needle noise and a ragged edge. A solid fill
+    // with noise laid over it always reads as concentric chevron bands.
+    const clump = (px2, py2, len, dir) => {
+      for (let k = 0; k < len; k++) {
+        const xx = Math.round(px2 + dir * k);
+        const yy = Math.round(py2 + k * 0.62);
+        const t2 = k / Math.max(1, len - 1);
+        // bright crown, mid body, dark butt — per clump, not per row
+        p.px(xx, yy - 1, PN[t2 < 0.45 ? 4 : 3]);
+        p.px(xx, yy, PN[t2 < 0.7 ? 3 : 2]);
+        p.px(xx, yy + 1, PN[1]);
+        if (k === len - 1) p.px(xx, yy + 2, PN[0]);
       }
-      // dark lip along the underside
-      p.px(x, colBottom, PN[1]);
-      // needles poking past the silhouette
-      if (hash2(n, t + seed * 5, 13) > 0.6)
-        tuft(x, colBottom - 1, 2, n < 0 ? -1 : 1, 1);
+    };
 
-      if (snowCover && hash2(n, t + seed, 18) > 0.28) {
-        // snow settles on the upper surface, patchy and thinning outward
-        const cap = Math.max(1, Math.round((1 - a) * 2.4));
-        for (let k = 0; k < cap && colTop + k <= colBottom; k++)
-          p.px(x, colTop + k, R.snow[k === 0 ? 4 : 3]);
+    for (let n = -rad; n <= rad; n += 2) {
+      const a = Math.abs(n) / rad;
+      const dir = n < 0 ? -1 : 1;
+      const jag = (hash2(n + 40, t + seed * 7, 21) - 0.5) * 2.4;
+      const colTop = ty + Math.round(depth * 0.9 * Math.pow(a, 1.25) + jag);
+      const x = cx + n + jitter;
+      // two or three stacked clumps per step, each a different length, so the
+      // interior fills by overlap and leaves flecks of the darkest tone showing
+      const layers = 2 + (hash2(n, t + seed, 63) > 0.55 ? 1 : 0);
+      for (let L = 0; L < layers; L++) {
+        const len = 3 + ((hash2(n, t * 7 + L + seed, 64) * 4) | 0);
+        const oy = Math.round(L * (depth * 0.30)) + ((hash2(n, L + seed, 65) * 2) | 0);
+        clump(x, colTop + oy, len, dir);
+        // a second clump shifted inward keeps the mass dense near the trunk
+        if (a < 0.75) clump(x - dir, colTop + oy + 2, Math.max(2, len - 1), dir);
+      }
+      // needles that break past the silhouette
+      if (hash2(n, t + seed * 5, 13) > 0.55) {
+        const spike = 2 + ((hash2(n, t + seed, 66) * 3) | 0);
+        for (let k = 0; k < spike; k++)
+          p.px(x + dir * (k + 1), colTop + Math.round(depth * 0.5) + k, PN[k ? 1 : 2]);
+      }
+
+      if (snowCover && hash2(n, t + seed, 18) > 0.18) {
+        // snow lies along the crown of every clump, thinning toward the tips
+        const cap = Math.max(1, Math.round((1 - a) * 3.2));
+        for (let k = 0; k < cap; k++) {
+          p.px(x, colTop + k - 2, R.snow[k === 0 ? 4 : 3]);
+          if (k === 0) p.px(x + dir, colTop - 2, R.snow[4]);
+        }
+        if (hash2(n, t, 67) > 0.5) { p.px(x, colTop - 3, R.snow[4]); p.px(x + dir, colTop - 1, R.snow[3]); }
       }
     }
   }
@@ -860,6 +886,128 @@ export function lampPost() {
   p.px(6, 20, R.ember[3]);
   outline(p.canvas, '#050212');
   return { canvas: p.canvas, light: [8, 12, 68] };
+}
+
+/** Fingerpost with pointing arms — the town's wayfinding. */
+export function signpost(arms) {
+  const w = 74, h = 62;
+  const p = new P(w, h);
+  const cx = 36;
+  // post
+  p.rect(cx - 2, 10, 5, 48, R.wood[2]);
+  p.rect(cx - 2, 10, 1, 48, R.wood[3]);
+  p.rect(cx + 2, 10, 1, 48, R.wood[1]);
+  p.rect(cx - 5, 56, 11, 4, R.wood[1]);
+  p.rect(cx - 6, 58, 13, 3, R.snow[2]);
+  p.rect(cx - 4, 8, 9, 3, R.wood[3]);
+  p.rect(cx - 4, 6, 9, 2, R.snow[4]);
+
+  arms.forEach((arm, i) => {
+    const { text, dir } = arm;                 // dir: -1 left, +1 right
+    const y = 16 + i * 15;
+    const bw = Math.max(30, textWidth(text, 1, 1) + 14);
+    const x0 = dir > 0 ? cx + 2 : cx + 2 - bw;
+    p.rect(x0, y, bw, 11, R.wood[2]);
+    p.rect(x0, y, bw, 1, R.wood[4]);
+    p.rect(x0, y + 10, bw, 1, R.wood[0]);
+    p.frame(x0, y, bw, 11, R.wood[1]);
+    // pointed tip
+    const tipX = dir > 0 ? x0 + bw : x0 - 1;
+    for (let k = 0; k < 5; k++) {
+      p.rect(tipX + dir * k, y + k, 1, 11 - k * 2, R.wood[2]);
+      p.px(tipX + dir * k, y + k, R.wood[4]);
+    }
+    drawText(p.x, text, x0 + bw / 2 + (dir > 0 ? -2 : 2), y + 2,
+             { color: '#f2e6d0', align: 'center', scale: 1, tracking: 1, shadow: '#241009' });
+    p.rect(x0, y - 1, bw, 1, R.snow[4]);
+  });
+  outline(p.canvas, '#050212');
+  return p.canvas;
+}
+
+/** Timber arch marking the way out of town into the woods. */
+export function groveGate() {
+  const w = 96, h = 96;
+  const p = new P(w, h);
+  const W2 = R.bark;
+  // posts
+  for (const px2 of [6, w - 16]) {
+    p.rect(px2, 22, 10, 72, W2[2]);
+    p.rect(px2, 22, 3, 72, W2[3]);
+    p.rect(px2 + 8, 22, 2, 72, W2[1]);
+    for (let y = 28; y < 92; y += 7) p.hline(px2, y, 10, W2[1]);
+    p.rect(px2 - 3, 90, 16, 5, W2[1]);
+    p.rect(px2 - 4, 88, 18, 2, R.snow[3]);
+  }
+  // lintel
+  p.rect(2, 14, w - 4, 10, W2[2]);
+  p.rect(2, 14, w - 4, 2, W2[3]);
+  p.rect(2, 23, w - 4, 2, W2[0]);
+  p.rect(0, 10, w, 5, R.snow[4]);
+  p.rect(0, 15, w, 1, R.snow[2]);
+  for (let x = 3; x < w; x += 4)
+    if (hash2(x, 3, 91) > 0.4) icicle(p, x, 25, 2 + ((hash2(x, 4, 92) * 5) | 0));
+  // braces
+  for (let k = 0; k < 10; k++) {
+    p.px(17 + k, 25 + k, W2[2]); p.px(18 + k, 25 + k, W2[3]);
+    p.px(w - 18 - k, 25 + k, W2[2]); p.px(w - 19 - k, 25 + k, W2[3]);
+  }
+  // hanging board
+  p.rect(w / 2 - 30, 26, 60, 16, R.frameWood[1]);
+  p.frame(w / 2 - 30, 26, 60, 16, R.frameWood[3]);
+  p.rect(w / 2 - 30, 25, 60, 1, R.snow[4]);
+  drawText(p.x, 'HOLLOW GROVE', w / 2, 31,
+           { color: '#a3453a', align: 'center', scale: 1, tracking: 1, shadow: '#150a12' });
+  // lanterns
+  for (const lx of [12, w - 12]) {
+    p.rect(lx - 3, 44, 7, 8, R.ink[2]);
+    p.rect(lx - 2, 45, 5, 6, R.lamp[3]);
+    p.rect(lx - 1, 46, 3, 3, R.lamp[4]);
+    p.rect(lx - 4, 43, 9, 1, R.ink[3]);
+  }
+  outline(p.canvas, '#050212');
+  return { canvas: p.canvas, lights: [[12, 48], [w - 12, 48]] };
+}
+
+/** Interior door with a name board over it. */
+export function innerDoor(label) {
+  const w = 42, h = 52;
+  const p = new P(w, h);
+  const T = R.frameWood;
+  p.rect(2, 14, 38, 38, T[1]);
+  p.frame(2, 14, 38, 38, T[0]);
+  p.rect(6, 18, 30, 34, T[2]);
+  for (let x = 8; x < 36; x += 6) p.vline(x, 18, 34, T[1]);
+  p.rect(6, 18, 30, 1, T[3]);
+  p.rect(6, 32, 30, 2, T[1]);
+  p.px(32, 36, R.gold[3]); p.px(33, 36, R.gold[2]);
+  // warm spill under the door
+  p.rect(8, 49, 26, 3, R.lamp[2]);
+  // name board
+  p.rect(0, 0, w, 13, T[1]);
+  p.frame(0, 0, w, 13, T[3]);
+  p.rect(1, 1, w - 2, 1, T[4]);
+  drawText(p.x, label, w / 2, 3, { color: '#faea61', align: 'center', scale: 1, tracking: 1, shadow: '#150a12' });
+  outline(p.canvas, '#120301');
+  return p.canvas;
+}
+
+/** Swinging OPEN / CLOSED sign for the shop door. */
+export function openSign(isOpen) {
+  const p = new P(34, 30);
+  const T = R.frameWood;
+  p.rect(4, 0, 26, 2, R.ink[2]);
+  p.px(8, 2, R.ink[2]); p.px(25, 2, R.ink[2]);
+  p.rect(2, 4, 30, 22, T[2]);
+  p.frame(2, 4, 30, 22, T[0]);
+  p.rect(3, 5, 28, 1, T[4]);
+  p.frame(4, 6, 26, 18, isOpen ? R.toxic[2] : R.roomBrick[2]);
+  drawText(p.x, isOpen ? 'OPEN' : 'CLOSED', 17, 11,
+           { color: isOpen ? '#7fe0a4' : '#e0697c', align: 'center', scale: 1, tracking: 1, shadow: '#150a12' });
+  drawText(p.x, isOpen ? 'come in' : 'back soon', 17, 19,
+           { color: '#a8927c', align: 'center', scale: 1, tracking: 0, shadow: null });
+  outline(p.canvas, '#120301');
+  return p.canvas;
 }
 
 /** Low picket fence panel, snow-capped. */

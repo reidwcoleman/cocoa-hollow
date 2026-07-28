@@ -69,6 +69,7 @@ export class UI {
     this.drawHotbar(g);
     if (G.mapId === 'shop') this.drawShopStatus(g);
     if (G.mapId === 'grove' && G.boss.active && !G.boss.dead) this.drawBossBar(g);
+    this.drawWayfinder(g);
     this.drawPrompt(g);
     this.drawToast(g);
 
@@ -196,19 +197,75 @@ export class UI {
     if (b.stun > 0) drawText(g, 'STUNNED', VW / 2, y + 16, { color: '#ffd066', align: 'center' });
   }
 
+  /* ---------------- wayfinding ---------------- */
+  /**
+   * Arrows at the frame edge pointing at the places that matter on this map,
+   * so "where do I fight" and "where do I make chocolate" are never a question.
+   */
+  drawWayfinder(g) {
+    const G = this.game;
+    const targets = [];
+    for (const w of G.map.warps) {
+      const label = (w.label || '').split('—')[0].trim();
+      const key = w.to === 'grove' ? 'FIGHT' : w.to === 'kitchen' ? 'MAKE'
+                : w.to === 'shop' ? 'SHOP' : w.to === 'town' ? 'OUT' : null;
+      if (!key) continue;
+      targets.push({ x: w.x + w.w / 2, y: w.y + w.h / 2, key, label,
+                     col: key === 'FIGHT' ? '#ff8f6a' : key === 'MAKE' ? '#ffd066' : '#8fc9dc' });
+    }
+    if (!targets.length) return;
+    const camx = G.cam.x, camy = G.cam.y;
+    const pad = 16;
+    for (const t of targets) {
+      const sx = t.x - camx, sy = t.y - camy;
+      const onScreen = sx > pad && sx < VW - pad && sy > pad && sy < VH - pad;
+      if (onScreen) continue;                      // the sign itself is visible
+      // clamp to the frame edge along the direction from the player
+      const px = G.player.x - camx, py = G.player.y - camy;
+      const dx = sx - px, dy = sy - py;
+      const len = Math.hypot(dx, dy) || 1;
+      const ux = dx / len, uy = dy / len;
+      let k = 1e9;
+      if (ux > 0.001) k = Math.min(k, (VW - pad - px) / ux);
+      if (ux < -0.001) k = Math.min(k, (pad - px) / ux);
+      if (uy > 0.001) k = Math.min(k, (VH - pad - 26 - py) / uy);
+      if (uy < -0.001) k = Math.min(k, (pad + 22 - py) / uy);
+      const ax = Math.round(px + ux * k), ay = Math.round(py + uy * k);
+
+      const pulse = 0.65 + 0.35 * Math.sin(G.t * 3);
+      g.globalAlpha = pulse;
+      // arrowhead
+      for (let i = 0; i < 6; i++) {
+        const w2 = 6 - i;
+        g.fillStyle = i < 2 ? '#ffffff' : t.col;
+        g.fillRect(Math.round(ax + ux * i * 1.6 - w2 / 2 + uy * 0),
+                   Math.round(ay + uy * i * 1.6 - w2 / 2), w2, w2);
+      }
+      const lw = textWidth(t.key) + 8;
+      const lx = Math.round(ax - ux * 12 - lw / 2), ly = Math.round(ay - uy * 12 - 5);
+      g.fillStyle = 'rgba(8,5,14,0.82)';
+      g.fillRect(lx, ly, lw, 11);
+      g.fillStyle = t.col;
+      g.fillRect(lx, ly, lw, 1); g.fillRect(lx, ly + 10, lw, 1);
+      drawText(g, t.key, lx + lw / 2, ly + 2, { color: t.col, align: 'center' });
+      g.globalAlpha = 1;
+    }
+  }
+
   /* ---------------- interaction prompt ---------------- */
   drawPrompt(g) {
     const G = this.game;
     if (!G.hover || this.mode) return;
     const label = G.hover.label || 'Interact';
-    const str = `[E] ${label}`;
-    const w = textWidth(str) + 14;
-    const x = Math.round(VW / 2 - w / 2), y = VH - 62;
-    g.fillStyle = 'rgba(8,5,14,0.8)';
-    g.fillRect(x, y, w, 15);
+    const str = `[E]  ${label}`;
+    const w = textWidth(str, 1, 2) + 20;
+    const x = Math.round(VW / 2 - w / 2), y = VH - 66;
+    g.fillStyle = 'rgba(8,5,14,0.88)';
+    g.fillRect(x, y, w, 18);
     g.fillStyle = '#d0a437';
-    g.fillRect(x, y, w, 1); g.fillRect(x, y + 14, w, 1);
-    drawText(g, str, x + 7, y + 4, { color: C.text });
+    g.fillRect(x, y, w, 1); g.fillRect(x, y + 17, w, 1);
+    g.fillRect(x, y, 1, 18); g.fillRect(x + w - 1, y, 1, 18);
+    drawText(g, str, x + w / 2, y + 6, { color: C.text, align: 'center', tracking: 2 });
   }
 
   drawToast(g) {

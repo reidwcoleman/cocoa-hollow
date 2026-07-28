@@ -961,6 +961,7 @@ export class Game {
       else if (p.anim === 'fireplace') img = ART.fireplace[Math.floor(this.t * 8) % 4].canvas;
       else if (p.anim === 'chandelier') img = ART.chandelier[Math.floor(this.t * 5) % 4].canvas;
       else if (p.anim === 'conche') img = ART.conche[Math.floor(this.t * 4) % 4].canvas;
+      else if (p.anim === 'openSign') img = ART.openSign[this.shopOpen ? 1 : 0];
       draw.push({
         sy: p.sy, img, x: p.x, y: p.y,
         shadow: p.shadow ? [Math.round(p.x + img.width / 2 + (p.shadow[1] || 0)), p.sy - 2, p.shadow[0]] : null,

@@ -26,6 +26,12 @@ python3 server.py 4780      # then open http://127.0.0.1:4780/
 | `M` | journal |
 | `Esc` | menu |
 
+**Where to go.** Fingerposts along the street point east to a lit timber arch
+reading HOLLOW GROVE — that is where you fight and forage. Inside the castle, a
+signed KITCHEN door leads to the cauldrons and conching machines. If a
+destination is off-screen, an arrow at the frame edge points at it: orange
+FIGHT for the grove, gold MAKE for the kitchen.
+
 **The loop.** Head east along Hollow Street into the Grove. Gather cocoa
 pods, moonberries, gloomcaps and spirit salt; kill what tries to stop you. Take
 it back to the castle kitchen, pick a recipe at a cauldron, and hit the gold

@@ -240,10 +240,11 @@ function roomBrickTile(p, seed) {
     for (let bx = -14; bx < TS; bx += 14) {
       const x = bx + off, y = ry;
       const k = (x * 13 + y * 7 + seed * 31) | 0;
-      const b = 2 + Math.round(hash2(k, seed, 811) * 1.6 - 0.3);
-      p.rect(x + 1, y + 1, 12, 4, B[Math.max(1, Math.min(4, b))]);
+      const b = 1 + Math.floor(hash2(k, seed, 811) * 4);
+      p.rect(x + 1, y + 1, 12, 4, B[Math.max(0, Math.min(4, b))]);
       p.hline(x + 1, y + 1, 12, B[Math.min(4, b + 1)]);
-      p.hline(x + 1, y + 4, 12, B[Math.max(0, b - 1)]);
+      p.hline(x + 1, y + 4, 12, B[Math.max(0, b - 2)]);
+      if (hash2(k, seed, 814) > 0.90) p.rect(x + 1, y + 1, 12, 4, B[0]);   // a chipped unit
       if (hash2(k, seed, 812) > 0.8) p.px(x + 3 + ((hash2(k, seed, 813) * 8) | 0), y + 3, B[0]);
     }
   }

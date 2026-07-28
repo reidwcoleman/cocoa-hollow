@@ -100,6 +100,7 @@ export function buildArt() {
   ];
   ART.roomFrame = {};
   ART.wallCabinet = PR.wallCabinet(3);
+  ART.openSign = [PR.openSign(false), PR.openSign(true)];
   ART.castle = PR.castleShop();
   ART.houses = [
     PR.townhouse({ w: 74, facadeH: 34, roof: 'plum',  wall: 'masonry', trim: 'wood', seed: 3,  chimneys: [52] }),
@@ -366,15 +367,41 @@ export function buildTown() {
   }
 
   /* ---- vendors sit on the lower level, facing the street ---- */
-  m.interact.push({ x: 24 * TS, y: LOW_Y * TS, w: TS * 4, h: TS * 3,
-                    type: 'vendor', vendorId: 'dairy', label: "Poppy's Dairy" });
-  m.interact.push({ x: 70 * TS, y: LOW_Y * TS, w: TS * 4, h: TS * 3,
-                    type: 'vendor', vendorId: 'general', label: 'The Hollow Exchange' });
+  for (const [vx, vid, vlabel, hue] of [[24, 'dairy', "Poppy's Dairy — buy ingredients", 'teal'],
+                                        [70, 'general', 'The Hollow Exchange — buy ingredients', 'ruby']]) {
+    const stall = PR.marketStall(vx, hue);
+    const vy = LOW_Y + 1;
+    m.addProp(vx * TS - 6, vy * TS - 30, stall, vy * TS + 14, [17]);
+    m.blockRect(vx, vy, 3, 1);
+    m.addLight(vx * TS + 22, vy * TS - 2, 42, '#ffc06a', 0.5, 1, 0.66);
+    m.interact.push({ x: (vx - 1) * TS, y: (vy - 1) * TS, w: TS * 5, h: TS * 3,
+                      type: 'vendor', vendorId: vid, label: vlabel });
+  }
 
-  /* ---- the grove is off the east end of the street ---- */
+  /* ---- the way out to the grove is an arch you can see from a distance ---- */
+  const gate = PR.groveGate();
+  const gateX = (W - 8) * TS, gateY = (LOW_Y + LOW_H) * TS - 96;
+  m.addProp(gateX, gateY, gate.canvas, (LOW_Y + LOW_H) * TS + 2);
+  for (const [lx, ly] of gate.lights)
+    m.addLight(gateX + lx, gateY + ly, 56, '#ffc75e', 0.5, 1, 0.7);
+  for (let y = LOW_Y; y < LOW_Y + LOW_H; y++)
+    for (let x = W - 8; x < W - 2; x++) m.set(x, y, 'cobble');
+
   m.warps.push({ x: (W - 1) * TS, y: LOW_Y * TS, w: TS, h: TS * LOW_H,
-                 to: 'grove', tx: 3 * TS, ty: 24 * TS, label: 'Hollow Grove' });
+                 to: 'grove', tx: 3 * TS, ty: 24 * TS, label: 'Hollow Grove — fight and forage' });
   for (let y = LOW_Y; y < LOW_Y + LOW_H; y++) m.block(W - 1, y, 0);
+
+  /* ---- fingerposts telling you where everything is ---- */
+  const posts = [
+    [30, [{ text: 'GROVE', dir: 1 }, { text: 'YOUR SHOP', dir: -1 }]],
+    [62, [{ text: 'GROVE', dir: 1 }, { text: 'MARKET', dir: -1 }]],
+    [92, [{ text: 'GROVE', dir: 1 }]],
+  ];
+  for (const [sx, arms] of posts) {
+    const img = PR.signpost(arms);
+    m.addProp(sx * TS - 36, (LOW_Y + 1) * TS - 56, img, (LOW_Y + 1) * TS + 6, [8]);
+    m.block(sx, LOW_Y + 1);
+  }
 
   /* ---- edges ---- */
   for (let x2 = 0; x2 < W; x2++) { m.block(x2, 0); m.block(x2, H - 1); }
@@ -495,10 +522,16 @@ export function buildShop() {
   const doorX = PORCH[0] + 1;
   m.warps.push({ x: PORCH[0] * TS, y: PORCH[1] * TS, w: PORCH[2] * TS, h: TS,
                  to: 'town', anchorTown: true, label: 'Step Outside' });
-  m.warps.push({ x: RX0 * TS, y: FY0 * TS, w: TS * 2, h: TS * 2,
-                 to: 'kitchen', spawn: true, label: 'The Kitchen' });
-  m.interact.push({ x: 24 * TS, y: (LOWY + 2) * TS, w: TS * 2, h: TS * 2,
-                    type: 'openSign', label: 'Open / Close Shop' });
+  // the way to the kitchen is a signed door, not an invisible tile
+  m.addProp(RX0 * TS + 2, (FY0 - 3) * TS + 4, PR.innerDoor('KITCHEN'), FY0 * TS + 8);
+  m.addLight(RX0 * TS + 23, FY0 * TS - 6, 40, '#ffd066', 0.45, 0, 0.6);
+  m.warps.push({ x: RX0 * TS, y: FY0 * TS, w: TS * 3, h: TS * 2,
+                 to: 'kitchen', spawn: true, label: 'The Kitchen — make chocolate' });
+  // the open/closed sign is an object you can see, and it flips with the state
+  m.openSignProp = m.addProp(24 * TS, (LOWY + 1) * TS - 6, ART.openSign[0], (LOWY + 2) * TS + 6);
+  m.openSignProp.anim = 'openSign';
+  m.interact.push({ x: 23 * TS, y: (LOWY + 1) * TS, w: TS * 3, h: TS * 2,
+                    type: 'openSign', label: 'Open / Close the Shop' });
 
   m.roam = { x: RX0 + 2, y: FY0, w: UPPER[2] - 5, h: 3 };
   m.door = { x: doorX * TS + 8, y: PORCH[1] * TS + 8 };
@@ -584,6 +617,8 @@ export function buildKitchen() {
     m.block(lx, ly);
   }
 
+  m.addProp(13 * TS, (LOWY + LAND[3] - 1) * TS - 30, PR.innerDoor('SHOP'),
+            (LOWY + LAND[3] - 1) * TS + 8);
   m.warps.push({ x: 13 * TS, y: (LOWY + LAND[3] - 1) * TS, w: TS * 3, h: TS,
                  to: 'shop', spawn: true, label: 'Back to the Shop' });
 
