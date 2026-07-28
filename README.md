@@ -108,6 +108,11 @@ Three things carry the art direction:
 3. **Ground noise wraps.** Tile texture uses `wrapNoise`, a value noise on a
    lattice that repeats inside the tile, so large snow fields have no seams and
    no diagonal banding.
+4. **Interiors are islands on black.** A room is exactly one screen, so the
+   camera holds all of it at once, and it sits inside a multi-layer moulded
+   frame (`roomFrame()` in `art/props.js`) with near-black around it. The
+   footprint is deliberately irregular — a raised step across one end — because
+   a plain rectangle reads as a box rather than a room somebody built.
 
 ## Development harness
 

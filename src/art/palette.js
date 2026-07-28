@@ -28,6 +28,10 @@ export const RAMP = {
   roofSlate:['#1e41d3', '#4575ff', '#74a9ff', '#a3bdff', '#cfdcff'],
   // warm olive river-rock for gable ends, against the cold roof
   river:   ['#2a2419', '#463c2c', '#5d5039', '#7a6a4a', '#9b8a63'],
+  // interior room frame moulding, and the black it floats on
+  frameWood:['#120301', '#210c12', '#4d2513', '#70391b', '#9a5f30'],
+  roomBrick:['#160b0e', '#331818', '#5f1921', '#7f2222', '#a3453a'],
+  boards:  ['#2d1410', '#43221a', '#5a3226', '#744433', '#8f5a42'],
   slate:   ['#181546', '#241d68', '#33298c', '#4438ad', '#5a4dcc'],
 
   // --- wood & interior ---

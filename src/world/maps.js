@@ -92,6 +92,8 @@ export function buildArt() {
     PR.shopfront({ w: 112, sign: 'APOTHECARY', roof: 'teal',      stone: 'river', trim: 'oak',  seed: 11, chimneyX: 0.78, signCol: '#4fc6ce' }),
     PR.shopfront({ w: 136, sign: 'THE ANVIL',  roof: 'plum',      stone: 'river', trim: 'wood', seed: 17, chimneyX: 0.24, signCol: '#f0a52a' }),
   ];
+  ART.roomFrame = {};
+  ART.wallCabinet = PR.wallCabinet(3);
   ART.castle = PR.castleShop();
   ART.houses = [
     PR.townhouse({ w: 74, facadeH: 34, roof: 'plum',  wall: 'masonry', trim: 'wood', seed: 3,  chimneys: [52] }),
@@ -376,92 +378,94 @@ export function buildTown() {
  * SHOP INTERIOR
  * ================================================================== */
 export function buildShop() {
-  const W = 32, H = 22;
-  const m = new GameMap('shop', W, H, { base: 'woodFloor', indoor: true, name: 'The Cocoa Hollow' });
-  m.ambient = { key: 'night', amount: 0.40, tint: '#5a3a66', bloom: 0.7, vignetteAmt: 0.38 };
+  // The map is exactly one screen. The room sits inside it as a framed island
+  // on black, so the camera can hold the whole shop at once — that framing is
+  // the signature of the interior idiom this game is built in.
+  const W = 25, H = 14;
+  const m = new GameMap('shop', W, H, { base: 'void', indoor: true, name: 'The Cocoa Hollow' });
+  m.ambient = { key: 'night', amount: 0.30, tint: '#6a4438', bloom: 0.62, vignetteAmt: 0.20 };
+  m.fill(0, 0, W, H, 'void');
 
-  m.fill(0, 0, W, H, 'woodFloor');
+  // room footprint, in tiles (inclusive)
+  const RX0 = 2, RY0 = 1, RX1 = 22, RY1 = 12;
+  const WALLH = 3;                                   // rows of brick above the floor
+  const FY0 = RY0 + WALLH;                           // first floor row
 
-  /* ---- walls: five courses of castle stone with a wainscot base ---- */
-  const WALL_H = 5;
-  for (let x = 0; x < W; x++) for (let y = 0; y < WALL_H; y++) m.set(x, y, 'wallWarm');
-  m.blockRect(0, 0, W, WALL_H);
-  for (let y = 0; y < H; y++) {
-    m.set(0, y, 'wallWarm'); m.set(1, y, 'wallWarm');
-    m.set(W - 1, y, 'wallWarm'); m.set(W - 2, y, 'wallWarm');
-    m.block(0, y); m.block(1, y); m.block(W - 1, y); m.block(W - 2, y);
-  }
-  for (let x = 0; x < W; x++) m.block(x, H - 1);
-  m.addProp(0, WALL_H * TS - 12, PR.wainscot(W * TS), WALL_H * TS - 1);
+  for (let y = RY0; y <= RY1; y++)
+    for (let x = RX0; x <= RX1; x++)
+      m.set(x, y, y < FY0 ? 'roomBrick' : 'woodFloor');
 
-  /* ---- one big rug as a floor decal ---- */
-  const rugW = 12 * TS, rugH = 6 * TS;
-  m.decals.push({ x: 10 * TS, y: 11 * TS, img: PR.rugLarge(rugW, rugH) });
+  // a raised step across the left third — an irregular floor reads as a room
+  // someone built, not a box
+  const STEPX = RX0 + 6;
+  for (let y = FY0 + 4; y <= RY1; y++)
+    for (let x = RX0; x < STEPX; x++) m.set(x, y, 'woodFloorDark');
 
-  /* ---- windows + hearth on the back wall ---- */
-  for (const wx of [5, 24]) {
-    m.addProp(wx * TS, TS + 6, PR.interiorWindow(true), WALL_H * TS - 4);
-    m.addLight(wx * TS + 14, TS + 20, 70, '#8a97cf', 0.35, 0, 0.5);
+  /* ---- solid everywhere except the floor ---- */
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++)
+      if (x < RX0 || x > RX1 || y < FY0 || y > RY1) m.block(x, y);
+
+  /* ---- the moulded frame, drawn over everything at the room edge ---- */
+  const fw = (RX1 - RX0 + 1) * TS, fh = (RY1 - RY0 + 1) * TS;
+  const fr = PR.roomFrame(fw + 16, fh + 16);
+  m.addProp(RX0 * TS - 8, RY0 * TS - 8, fr.canvas, 1e9);
+
+  /* ---- back wall dressing ---- */
+  m.addProp(9 * TS, RY0 * TS + 2, PR.curtain(7 * TS, WALLH * TS - 6), FY0 * TS - 2);
+  m.addProp(RX0 * TS + 6, RY0 * TS + 6, ART.wallCabinet, FY0 * TS - 3);
+  for (const sx of [17, 20]) {
+    m.addProp(sx * TS, RY0 * TS + 6, ART.shelf[sx % 3], FY0 * TS - 1, null);
   }
   const fp = PR.fireplace(0);
-  m.addProp(14 * TS, TS - 6, fp.canvas, WALL_H * TS + 2);
+  m.addProp(6 * TS, RY0 * TS + 4, fp.canvas, FY0 * TS + 2);
   m.props[m.props.length - 1].anim = 'fireplace';
-  m.addLight(14 * TS + fp.light[0], TS - 6 + fp.light[1], fp.light[2], '#ff9a3c', 0.8, 1, 0.9);
-  m.blockRect(14, 4, 3, 1);
+  m.addLight(6 * TS + fp.light[0], RY0 * TS + 4 + fp.light[1], 96, '#ff9a3c', 0.85, 1, 0.95);
 
-  /* ---- warm overhead light pools (lamps hang out of frame) ---- */
-  for (const [cx, cy] of [[10, 11], [22, 11], [16, 17]])
-    m.addLight(cx * TS, cy * TS, 88, '#ffc86a', 0.4, 0, 0.66);
+  /* ---- rug on the main floor ---- */
+  m.decals.push({ x: 10 * TS, y: (FY0 + 3) * TS, img: PR.rugLarge(9 * TS, 5 * TS) });
 
-  /* ---- display counters facing the customers ---- */
+  /* ---- display counters ---- */
   m.counterSlots = [];
-  const cSpots = [[6, 7], [11, 7], [16, 7], [21, 7], [5, 16], [24, 16]];
+  const cSpots = [[8, FY0 + 1], [12, FY0 + 1], [16, FY0 + 1], [19, FY0 + 1],
+                  [3, FY0 + 6], [20, FY0 + 6]];
   cSpots.forEach(([cx, cy], i) => {
     m.addProp(cx * TS, cy * TS - 10, ART.counter[i % 4], cy * TS + 16, [15]);
     m.blockRect(cx, cy, 2, 1);
-    m.counterSlots.push({ tx: cx, ty: cy, x: cx * TS, y: cy * TS - 10, item: null, qty: 0, price: 0, style: i % 4, id: i });
+    m.counterSlots.push({ tx: cx, ty: cy, x: cx * TS, y: cy * TS - 10,
+                          item: null, qty: 0, price: 0, style: i % 4, id: i });
   });
 
-  /* ---- shelves + menu board against the back wall ---- */
-  for (const sx of [2, 9, 19, 28]) {
-    m.addProp(sx * TS, WALL_H * TS - 34, ART.shelf[(sx / 6) % 3 | 0], WALL_H * TS + 6, [14]);
-    m.blockRect(sx, WALL_H, 2, 1);
-  }
-  m.addProp(19 * TS, TS + 8, PR.chalkboard(), WALL_H * TS - 3);
-
-  /* ---- seating + greenery ---- */
-  for (const [tx, ty] of [[4, 19], [26, 19]]) {
+  /* ---- seating, greenery, stock ---- */
+  for (const [tx, ty] of [[9, RY1 - 1], [17, RY1 - 1]]) {
     m.addProp(tx * TS, ty * TS - 6, ART.table, ty * TS + 16, [11]);
     m.blockRect(tx, ty, 2, 1);
     m.addProp((tx - 1) * TS - 4, ty * TS - 10, ART.chair, ty * TS + 15, [6]);
-    m.addProp((tx + 2) * TS + 2, ty * TS - 10, ART.chair, ty * TS + 15, [6]);
   }
-  for (const [px2, py2] of [[3, 12], [28, 12], [3, 8], [28, 8]]) {
+  for (const [px2, py2] of [[RX0, FY0 + 1], [RX1 - 1, FY0 + 1], [RX1 - 1, RY1 - 1]]) {
     m.addProp(px2 * TS, py2 * TS - 14, PR.pottedPlant(px2), py2 * TS + 14, [8]);
     m.block(px2, py2);
   }
-  for (const [bx, by] of [[9, 19], [22, 19]]) {
-    m.addProp(bx * TS, by * TS - 4, ART.barrel, by * TS + 14, [7]);
-    m.block(bx, by);
-  }
+  m.addProp(4 * TS, (RY1 - 1) * TS - 4, ART.barrel, (RY1 - 1) * TS + 14, [7]);
+  m.block(4, RY1 - 1);
 
-  /* ---- candelabras on the side walls ---- */
-  for (const [lx, ly] of [[2, 10], [29, 10], [2, 16], [29, 16]]) {
-    m.addProp(lx * TS, ly * TS - 14, ART.candelabra[0].canvas, ly * TS + 12);
-    m.props[m.props.length - 1].anim = 'candelabra';
-    m.addLight(lx * TS + 7, ly * TS - 10, 52, '#ffd066', 0.6, 0.4);
-    m.block(lx, ly);
-  }
+  /* ---- warm pools; the lamps themselves hang out of frame ---- */
+  for (const [cx, cy] of [[7, FY0 + 3], [13, FY0 + 2], [19, FY0 + 4]])
+    m.addLight(cx * TS, cy * TS, 92, '#ffb066', 0.5, 0, 0.72);
 
   /* ---- exits ---- */
-  m.warps.push({ x: 14 * TS, y: (H - 2) * TS, w: TS * 4, h: TS * 2, to: 'town', tx: 41 * TS, ty: 0, label: 'Step Outside', anchorTown: true });
-  for (let x = 14; x < 18; x++) { m.block(x, H - 1, 0); m.block(x, H - 2, 0); m.set(x, H - 1, 'castleFloor'); }
-  m.warps.push({ x: 2 * TS, y: WALL_H * TS, w: TS * 2, h: TS * 2, to: 'kitchen', tx: 12 * TS, ty: 13 * TS, label: 'The Kitchen' });
-  m.block(2, WALL_H, 0); m.block(3, WALL_H, 0);
-  m.set(2, WALL_H, 'castleFloor'); m.set(3, WALL_H, 'castleFloor');
+  const doorX = 12;
+  m.warps.push({ x: doorX * TS, y: RY1 * TS, w: TS * 2, h: TS,
+                 to: 'town', tx: 41 * TS, ty: 0, label: 'Step Outside', anchorTown: true });
+  for (let x = doorX; x < doorX + 2; x++) m.block(x, RY1, 0);
+  m.warps.push({ x: RX0 * TS, y: FY0 * TS, w: TS * 2, h: TS * 2,
+                 to: 'kitchen', tx: 12 * TS, ty: 9 * TS, label: 'The Kitchen' });
+  m.interact.push({ x: 17 * TS, y: (RY1 - 1) * TS, w: TS * 2, h: TS * 2,
+                    type: 'openSign', label: 'Open / Close Shop' });
 
-  m.interact.push({ x: 20 * TS, y: 19 * TS, w: TS * 2, h: TS * 2, type: 'openSign', label: 'Open / Close Shop' });
-
+  m.door = { x: (doorX + 1) * TS, y: RY1 * TS + 8 };
+  m.browseY = (FY0 + 4) * TS;
+  m.bounds = { x0: 0, y0: 0, x1: W * TS, y1: H * TS };
   m.props.sort((a, b) => a.sy - b.sy);
   return m;
 }
@@ -470,77 +474,83 @@ export function buildShop() {
  * KITCHEN / FOOD LABORATORY
  * ================================================================== */
 export function buildKitchen() {
-  const W = 26, H = 18;
-  const m = new GameMap('kitchen', W, H, { base: 'labFloor', indoor: true, name: 'The Food Laboratory' });
-  m.ambient = { key: 'deep', amount: 0.50, tint: '#3b2a63', bloom: 0.75, vignetteAmt: 0.42 };
+  const W = 25, H = 14;
+  const m = new GameMap('kitchen', W, H, { base: 'void', indoor: true, name: 'The Food Laboratory' });
+  m.ambient = { key: 'deep', amount: 0.42, tint: '#4a2f56', bloom: 0.7, vignetteAmt: 0.24 };
+  m.fill(0, 0, W, H, 'void');
 
-  m.fill(0, 0, W, H, 'labFloor');
-  for (let x = 0; x < W; x++) for (let y = 0; y < 3; y++) m.set(x, y, 'wallCastle');
-  for (let y = 0; y < H; y++) { m.set(0, y, 'wallCastle'); m.set(1, y, 'wallCastle'); m.set(W - 1, y, 'wallCastle'); m.set(W - 2, y, 'wallCastle'); }
-  m.blockRect(0, 0, W, 3);
-  for (let y = 0; y < H; y++) { m.block(0, y); m.block(1, y); m.block(W - 1, y); m.block(W - 2, y); }
-  for (let x = 0; x < W; x++) m.block(x, H - 1);
+  const RX0 = 2, RY0 = 1, RX1 = 22, RY1 = 12;
+  const WALLH = 3;
+  const FY0 = RY0 + WALLH;
 
-  // three cauldrons — the crafting stations
+  for (let y = RY0; y <= RY1; y++)
+    for (let x = RX0; x <= RX1; x++)
+      m.set(x, y, y < FY0 ? 'wallCastle' : 'labFloor');
+
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++)
+      if (x < RX0 || x > RX1 || y < FY0 || y > RY1) m.block(x, y);
+
+  const fw = (RX1 - RX0 + 1) * TS, fh = (RY1 - RY0 + 1) * TS;
+  m.addProp(RX0 * TS - 8, RY0 * TS - 8, PR.roomFrame(fw + 16, fh + 16).canvas, 1e9);
+
+  /* ---- three cauldrons along the working wall ---- */
   m.cauldrons = [];
-  [[6, 6], [12, 6], [18, 6]].forEach(([cx, cy], i) => {
-    const pr = { x: cx * TS - 12, y: cy * TS - 22, img: ART.cauldron[0].canvas, sy: cy * TS + 20, anim: 'cauldron', shadow: [15] };
-    m.props.push(pr);
+  [[5, FY0 + 1], [11, FY0 + 1], [17, FY0 + 1]].forEach(([cx, cy], i) => {
+    m.props.push({ x: cx * TS - 12, y: cy * TS - 22, img: ART.cauldron[0].canvas,
+                   sy: cy * TS + 20, anim: 'cauldron', shadow: [15] });
     m.blockRect(cx, cy, 2, 1);
-    m.addLight(cx * TS + 8, cy * TS + 8, 56, '#ff9c30', 0.7, 1, 0.85);
+    m.addLight(cx * TS + 8, cy * TS + 8, 58, '#ff9c30', 0.75, 1, 0.9);
     m.cauldrons.push({ tx: cx, ty: cy, id: i, busy: 0, recipe: null });
-    m.interact.push({ x: cx * TS - 8, y: cy * TS, w: TS * 3, h: TS * 2, type: 'cauldron', id: i, label: 'Temper Chocolate' });
+    m.interact.push({ x: cx * TS - 10, y: cy * TS, w: TS * 3, h: TS * 2,
+                      type: 'cauldron', id: i, label: 'Temper Chocolate' });
   });
 
-  // shelves of ingredients
-  for (const sx of [3, 9, 15, 21]) {
-    m.addProp(sx * TS, 3 * TS - 6, ART.shelf[sx % 3], 3 * TS + 34);
-    m.blockRect(sx, 3, 2, 2);
-  }
-  // work bench
-  for (const [bx, by] of [[6, 12], [12, 12], [18, 12]]) {
-    m.addProp(bx * TS, by * TS - 10, ART.counter[1], by * TS + 16);
-    m.blockRect(bx, by, 2, 1);
-  }
-  m.interact.push({ x: 11 * TS, y: 12 * TS, w: TS * 3, h: TS * 2, type: 'recipeBook', label: 'Recipe Book' });
-
-  // conching machines — the hands-off route
+  /* ---- conching machines ---- */
   m.conches = [];
-  [[4, 9], [20, 9]].forEach(([cx, cy], i) => {
+  [[4, FY0 + 6], [19, FY0 + 6]].forEach(([cx, cy], i) => {
     m.props.push({ x: cx * TS - 9, y: cy * TS - 18, img: ART.conche[0].canvas,
                    sy: cy * TS + 18, anim: 'conche', shadow: [13] });
     m.blockRect(cx, cy, 2, 1);
-    m.addLight(cx * TS + 8, cy * TS, 34, '#ffb84a', 0.4, 0, 0.5);
+    m.addLight(cx * TS + 8, cy * TS, 40, '#ffb84a', 0.42, 0, 0.6);
     m.conches.push({ id: i, recipe: null, t: 0, dur: 0, qty: 0 });
     m.interact.push({ x: cx * TS - 10, y: cy * TS - 6, w: TS * 3, h: TS * 2,
                       type: 'conche', id: i, label: 'Conching Machine' });
   });
 
-  for (const [lx, ly] of [[4, 15], [21, 15]]) {
-    m.addProp(lx * TS, ly * TS - 14, ART.candelabra[0].canvas, ly * TS + 12);
-    m.props[m.props.length - 1].anim = 'candelabra';
-    m.addLight(lx * TS + 7, ly * TS - 10, 50, '#ffd066', 0.55, 0.4);
-    m.block(lx, ly);
-  }
+  /* ---- shelves of ingredients along the wall ---- */
+  for (const sx of [3, 8, 14, 20])
+    m.addProp(sx * TS, RY0 * TS + 6, ART.shelf[sx % 3], FY0 * TS - 1);
+  m.addProp(11 * TS, RY0 * TS + 4, ART.wallCabinet, FY0 * TS - 2);
 
-  // clutter: sacks, crates, barrels and a hanging herb line
-  for (const [bx, by] of [[3, 9], [22, 9], [8, 15], [17, 15], [12, 9]]) {
+  /* ---- benches + the recipe book ---- */
+  for (const [bx, by] of [[8, FY0 + 6], [13, FY0 + 6]]) {
+    m.addProp(bx * TS, by * TS - 10, ART.counter[1], by * TS + 16, [15]);
+    m.blockRect(bx, by, 2, 1);
+  }
+  m.interact.push({ x: 8 * TS, y: (FY0 + 6) * TS, w: TS * 7, h: TS * 2,
+                    type: 'recipeBook', label: 'Recipe Book' });
+
+  for (const [bx, by] of [[3, FY0 + 3], [20, FY0 + 3]]) {
     m.addProp(bx * TS, by * TS - 4, ART.barrel, by * TS + 14, [7]);
     m.block(bx, by);
   }
-  for (const [bx, by] of [[5, 15], [20, 15], [10, 3]]) {
-    m.addProp(bx * TS, by * TS, ART.crate, by * TS + 14, [7]);
-    m.block(bx, by);
-  }
-  for (const [px2, py2] of [[3, 12], [22, 12]]) {
+  for (const [px2, py2] of [[RX1 - 1, FY0], [RX0, FY0]]) {
     m.addProp(px2 * TS, py2 * TS - 14, PR.pottedPlant(px2), py2 * TS + 14, [8]);
     m.block(px2, py2);
   }
+  for (const [lx, ly] of [[RX0, RY1 - 1], [RX1 - 1, RY1 - 1]]) {
+    m.addProp(lx * TS, ly * TS - 14, ART.candelabra[0].canvas, ly * TS + 12);
+    m.props[m.props.length - 1].anim = 'candelabra';
+    m.addLight(lx * TS + 7, ly * TS - 10, 54, '#ffd066', 0.55, 1, 0.7);
+    m.block(lx, ly);
+  }
 
+  m.warps.push({ x: 11 * TS, y: RY1 * TS, w: TS * 3, h: TS,
+                 to: 'shop', tx: 3 * TS, ty: 5 * TS, label: 'Back to the Shop' });
+  for (let x = 11; x < 14; x++) m.block(x, RY1, 0);
 
-  m.warps.push({ x: 11 * TS, y: (H - 2) * TS, w: TS * 4, h: TS * 2, to: 'shop', tx: 3 * TS, ty: 5 * TS, label: 'Back to the Shop' });
-  for (let x = 11; x < 15; x++) { m.block(x, H - 1, 0); m.block(x, H - 2, 0); }
-
+  m.bounds = { x0: 0, y0: 0, x1: W * TS, y1: H * TS };
   m.props.sort((a, b) => a.sy - b.sy);
   return m;
 }

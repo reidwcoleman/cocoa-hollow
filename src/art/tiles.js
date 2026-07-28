@@ -209,26 +209,56 @@ function castleFloorTile(p, seed) {
   }
 }
 
+/* ---------------- black surround outside an interior room ---------------- */
+function voidTile(p) {
+  p.rect(0, 0, TS, TS, '#120301');
+  for (let y = 0; y < TS; y++)
+    for (let x = 0; x < TS; x++)
+      if (hash2(x, y, 801) > 0.985) p.px(x, y, '#1c0806');
+}
+
+/* ---------------- maroon interior brick ---------------- */
+function roomBrickTile(p, seed) {
+  const B = R.roomBrick;
+  p.rect(0, 0, TS, TS, B[0]);                     // mortar
+  const rowH = 6;
+  for (let ry = -rowH; ry < TS; ry += rowH) {
+    const r = ((ry / rowH) | 0) + seed;
+    const off = (r % 2) ? 7 : 0;
+    for (let bx = -14; bx < TS; bx += 14) {
+      const x = bx + off, y = ry;
+      const k = (x * 13 + y * 7 + seed * 31) | 0;
+      const b = 2 + Math.round(hash2(k, seed, 811) * 1.6 - 0.3);
+      p.rect(x + 1, y + 1, 12, 4, B[Math.max(1, Math.min(4, b))]);
+      p.hline(x + 1, y + 1, 12, B[Math.min(4, b + 1)]);
+      p.hline(x + 1, y + 4, 12, B[Math.max(0, b - 1)]);
+      if (hash2(k, seed, 812) > 0.8) p.px(x + 3 + ((hash2(k, seed, 813) * 8) | 0), y + 3, B[0]);
+    }
+  }
+}
+
 /* ---------------- shop wooden floor ---------------- */
 function woodFloorTile(p, seed) {
-  const plankH = 8;                      // wider boards, softer banding
+  const plankH = 8;                      // wide warm boards running across
   for (let py = 0; py < TS; py += plankH) {
     const i = (py / plankH) | 0;
     const v = hash2(i, seed, 101);
-    const b = 2 + Math.round(v * 0.9 - 0.45);
-    p.rect(0, py, TS, plankH, R.floor[b]);
-    p.hline(0, py, TS, R.floor[Math.min(4, b + 1)]);
-    p.hline(0, py + plankH - 1, TS, R.floor[Math.max(0, b - 1)]);
+    const b = 2 + Math.round(v * 1.2 - 0.6);
+    p.rect(0, py, TS, plankH, R.boards[b]);
+    p.hline(0, py, TS, R.boards[Math.min(4, b + 1)]);
+    p.hline(0, py + plankH - 1, TS, R.boards[Math.max(0, b - 1)]);
     // grain streaks
     for (let g = 0; g < 4; g++) {
       const gx = (hash2(g, i + seed * 4, 111) * TS) | 0;
       const gl = 2 + ((hash2(g, i + seed * 4, 112) * 4) | 0);
       p.hline(gx, py + 1 + ((hash2(g, i, 113) * (plankH - 2)) | 0),
-              Math.min(gl, TS - gx), R.floor[Math.max(0, b - 1)]);
+              Math.min(gl, TS - gx), R.boards[Math.max(0, b - 1)]);
     }
-    // plank seam
-    const seam = ((hash2(i, seed, 121) * TS) | 0);
-    p.vline(seam, py, plankH, R.floor[0]);
+    // occasional butt joint, not one per plank per tile
+    if (hash2(i, seed, 121) > 0.72) {
+      const seam = 2 + ((hash2(i, seed, 122) * (TS - 4)) | 0);
+      p.vline(seam, py + 1, plankH - 2, R.boards[Math.max(0, b - 1)]);
+    }
   }
 }
 
@@ -382,6 +412,9 @@ export function buildTiles() {
   variants('path', 5, pathTile);
   variants('castleFloor', 5, castleFloorTile);
   variants('woodFloor', 5, woodFloorTile);
+  variants('woodFloorDark', 4, (p, sd) => { woodFloorTile(p, sd); 
+    for (let y = 0; y < TS; y++) for (let x = 0; x < TS; x++)
+      if (hash2(x, y, 901) > 0.35) p.px(x, y, R.boards[hash2(x, y, 902) > 0.5 ? 1 : 0]); });
   variants('labFloor', 4, labFloorTile);
   variants('grass', 6, grassTile);
   variants('dirt', 5, dirtTile);
@@ -392,6 +425,8 @@ export function buildTiles() {
   TILES.rugRight = [tile(4, (p, s) => rugTile(p, s, 'right'))];
   variants('wallCastle', 4, (p, s) => wallTile(p, s, 'castle'));
   variants('wallWarm', 4, (p, s) => wallTile(p, s, 'warm'));
+  variants('roomBrick', 4, roomBrickTile);
+  TILES.void = [tile(1, voidTile)];
   variants('wallHouse', 3, (p, s) => wallTile(p, s, 'house'));
   TILES.water = [0, 1, 2, 3].map(f => tile(1, (p, s) => waterTile(p, s, f)));
   return TILES;

@@ -530,8 +530,8 @@ export class Ghost {
           this.carrying = true;
           this.target = c;
         } else {
-          this.tx = (6 + Math.random() * 20) * TS;
-          this.ty = (6 + Math.random() * 12) * TS;
+          this.tx = (4 + Math.random() * 17) * TS;
+          this.ty = (5 + Math.random() * 7) * TS;
           if (this.carrying && this.target) {
             game.restock(this.target);
             this.target = null;
@@ -589,8 +589,11 @@ export class Customer {
       return false;
     };
 
+    const door = map.door || { x: 16 * TS, y: 21 * TS };
+    const browseY = map.browseY != null ? map.browseY : 17 * TS;
+
     if (this.state === 'enter') {
-      if (goto(this.x, 17 * TS, 42, 6)) { this.state = 'browse'; this.pickTarget(game); }
+      if (goto(this.x, browseY, 42, 6)) { this.state = 'browse'; this.pickTarget(game); }
     } else if (this.state === 'browse') {
       if (!this.target) { this.pickTarget(game); if (!this.target) { this.state = 'leave'; return; } }
       const c = this.target;
@@ -608,7 +611,7 @@ export class Customer {
         this.t = 0;
       }
     } else if (this.state === 'leave') {
-      if (goto(16 * TS, 21 * TS, 46, 8)) this.done = true;
+      if (goto(door.x, door.y, 46, 8)) this.done = true;
     }
     if (this.patience <= 0 && this.state !== 'leave') this.state = 'leave';
   }

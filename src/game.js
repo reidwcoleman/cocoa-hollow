@@ -83,7 +83,7 @@ export class Game {
     this.ghosts = [];
     this.customers = [];
     for (let i = 0; i < 4; i++)
-      this.ghosts.push(new Ghost(i % 3, (8 + i * 4) * TS, (10 + (i % 2) * 4) * TS, GHOST_NAMES[i]));
+      this.ghosts.push(new Ghost(i % 3, (7 + i * 4) * TS, (8 + (i % 2) * 3) * TS, GHOST_NAMES[i]));
     this.boss = new Boss(this.maps.grove.bossArena.x + this.maps.grove.bossArena.w / 2,
                          this.maps.grove.bossArena.y + this.maps.grove.bossArena.h / 2);
 
@@ -619,7 +619,8 @@ export class Game {
       let r = Math.random() * weights.reduce((a, b) => a + b, 0);
       let pick = known[0];
       for (let i = 0; i < known.length; i++) { r -= weights[i]; if (r <= 0) { pick = known[i]; break; } }
-      const c = new Customer(pick.def.spec, (15 + Math.random() * 2) * TS, 21 * TS);
+      const d = this.maps.shop.door || { x: 16 * TS, y: 21 * TS };
+      const c = new Customer(pick.def.spec, d.x + (Math.random() - 0.5) * 12, d.y);
       c.npcId = pick.def.id;
       c.name = pick.def.name;
       c.taste = pick.def.likes;
@@ -635,7 +636,8 @@ export class Game {
       { skin: 'skinB', hair: 'ink', hairStyle: 'short', shirt: 'cream', pants: 'teal', shoe: 'wood', cape: 'teal' },
     ];
     const sp = palettes[(Math.random() * palettes.length) | 0];
-    const c = new Customer(sp, (15 + Math.random() * 2) * TS, 21 * TS);
+    const d = this.maps.shop.door || { x: 16 * TS, y: 21 * TS };
+    const c = new Customer(sp, d.x + (Math.random() - 0.5) * 12, d.y);
     c.taste = [];
     this.customers.push(c);
   }

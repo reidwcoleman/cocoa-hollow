@@ -264,32 +264,37 @@ export function buildChar(spec) {
  * ------------------------------------------------------------------ */
 export function ghostFrame(variant, frame, carrying) {
   const p = new P(16, 20);
-  const G = variant === 1 ? R.wisp : variant === 2 ? R.toxic : R.ghost;
+  // the reference staff are small, bright and near-white — the tinted variants
+  // stay close to that rather than reading as coloured blobs
+  const G = variant === 1 ? ['#2b5aa0', '#4a86e0', '#7fb4f5', '#c2e0ff', '#ffffff']
+          : variant === 2 ? ['#1e6a72', '#2f9ba6', '#5fc8d2', '#b4eef4', '#ffffff']
+          : R.ghost;
   const bob = [0, -1, -2, -1][frame % 4];
   const y = 3 + bob;
 
   // body: rounded top, wavy tail
-  p.ellipse(8, y + 5, 6, 6, G[2]);
-  p.rect(2, y + 5, 13, 6, G[2]);
+  p.ellipse(8, y + 5, 5, 5, G[3]);
+  p.rect(3, y + 5, 11, 5, G[3]);
   // wavy hem
   const wave = frame % 4;
-  for (let i = 0; i < 13; i++) {
-    const h = 2 + Math.round(1.6 * Math.sin((i + wave * 1.5) * 0.9));
-    p.rect(2 + i, y + 11, 1, h, G[2]);
+  for (let i = 0; i < 11; i++) {
+    const h = 2 + Math.round(1.4 * Math.sin((i + wave * 1.5) * 0.9));
+    p.rect(3 + i, y + 10, 1, h, G[3]);
+    p.px(3 + i, y + 10 + h, G[2]);
   }
-  // shading
-  p.ellipse(6, y + 4, 4, 4, G[3]);
-  p.rect(2, y + 5, 2, 7, G[1]);
-  p.rect(13, y + 5, 2, 7, G[1]);
-  p.ellipse(6, y + 2, 2, 1, G[4]);
+  // shading — bright core, thin cool rim
+  p.ellipse(7, y + 4, 3, 3, G[4]);
+  p.rect(3, y + 5, 1, 6, G[2]);
+  p.rect(13, y + 5, 1, 6, G[2]);
+  p.ellipse(6, y + 2, 2, 1, '#ffffff');
   // face
-  p.rect(5, y + 4, 2, 3, R.void[0]);
-  p.rect(9, y + 4, 2, 3, R.void[0]);
-  p.px(5, y + 4, G[4]); p.px(9, y + 4, G[4]);
-  p.ellipse(8, y + 8, 2, 1, R.void[0]);
+  p.rect(5, y + 4, 2, 2, '#12061e');
+  p.rect(9, y + 4, 2, 2, '#12061e');
+  p.px(8, y + 7, '#12061e'); p.px(7, y + 7, '#12061e');
+  p.px(6, y + 6, '#12061e'); p.px(9, y + 6, '#12061e');
   // little arms
-  p.rect(1, y + 6, 2, 2, G[2]);
-  p.rect(13, y + 6, 2, 2, G[2]);
+  p.rect(2, y + 6, 2, 2, G[3]);
+  p.rect(12, y + 6, 2, 2, G[3]);
 
   if (carrying) {
     // holding a tray of chocolates overhead

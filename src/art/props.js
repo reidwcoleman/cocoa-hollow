@@ -1107,10 +1107,10 @@ export function counter(style = 0) {
   const TRIMS = ['gold', 'gold', 'gold', 'ruby'];
   const W = R[WOODS[style % 4]], T = R[TRIMS[style % 4]];
   // glass case top
-  p.rect(0, 6, 32, 4, mix(R.moon[2], W[1], 0.55));
-  p.rect(0, 6, 32, 1, R.moon[3]);
-  p.rect(1, 7, 30, 2, mix(R.night[2], R.moon[1], 0.4));
-  for (let x = 2; x < 30; x += 7) p.vline(x, 6, 4, R.moon[3]);
+  p.rect(0, 6, 32, 4, mix(R.cream[2], W[1], 0.5));
+  p.rect(0, 6, 32, 1, R.cream[4]);
+  p.rect(1, 7, 30, 2, mix(W[1], R.lamp[1], 0.35));
+  for (let x = 2; x < 30; x += 7) p.vline(x, 6, 4, R.cream[3]);
   // body
   p.rect(0, 10, 32, 14, W[2]);
   p.rect(0, 10, 32, 1, W[3]);
@@ -1132,7 +1132,7 @@ export function counter(style = 0) {
 /** Shelf/hutch against a wall. */
 export function shelf(style = 0) {
   const p = new P(32, 40);
-  const W = R[['oak', 'wood', 'plum'][style % 3]];
+  const W = R[['oak', 'wood', 'frameWood'][style % 3]];   // interior woods stay warm
   p.rect(0, 0, 32, 40, W[1]);
   p.rect(0, 0, 32, 2, W[3]);
   p.rect(0, 0, 2, 40, W[2]);
@@ -1146,8 +1146,8 @@ export function shelf(style = 0) {
   const jars = [[5, 4], [13, 5], [22, 4], [6, 16], [16, 17], [24, 16], [8, 28], [19, 28]];
   jars.forEach(([jx, jy], i) => {
     const col = [R.cocoa, R.milk, R.white, R.ruby, R.caramel, R.toxic][i % 6];
-    p.rect(jx, jy, 6, 6, mix(col[2], R.moon[2], 0.25));
-    p.rect(jx, jy, 6, 1, R.moon[3]);
+    p.rect(jx, jy, 6, 6, mix(col[2], R.cream[3], 0.28));
+    p.rect(jx, jy, 6, 1, R.cream[4]);
     p.rect(jx + 1, jy + 2, 4, 4, col[2]);
     p.px(jx + 1, jy + 2, col[4]);
     p.rect(jx, jy - 1, 6, 1, R.oak[2]);
@@ -1354,6 +1354,113 @@ export function rugLarge(w, h) {
   return p.canvas;
 }
 
+/**
+ * The moulded border that separates an interior room from the black around it.
+ * Drawn as a hollow rectangle of concentric bands — dark groove, light bead,
+ * mid field — mitred at the corners. This frame is the single strongest
+ * signature of the reference interior idiom.
+ */
+export function roomFrame(w, h) {
+  const p = new P(w, h);
+  const F = R.frameWood;
+  // band profile from the outside in: [thickness, ramp index]
+  const bands = [[2, 0], [4, 2], [2, 1], [5, 3], [2, 1], [4, 2], [1, 0], [1, 3], [1, 0]];
+  let off = 0;
+  for (const [t, ci] of bands) {
+    for (let k = 0; k < t; k++) {
+      const i = off + k;
+      if (i * 2 >= Math.min(w, h)) break;
+      p.frame(i, i, w - i * 2, h - i * 2, F[ci]);
+    }
+    off += t;
+  }
+  // a lit bead along the top and left of the moulding, shadow bottom-right
+  p.hline(2, 2, w - 4, F[3]);
+  p.vline(2, 2, h - 4, F[3]);
+  p.hline(2, h - 3, w - 4, F[0]);
+  p.vline(w - 3, 2, h - 4, F[0]);
+  // corner blocks
+  for (const [cx, cy] of [[2, 2], [w - 10, 2], [2, h - 10], [w - 10, h - 10]]) {
+    p.rect(cx, cy, 8, 8, F[2]);
+    p.frame(cx, cy, 8, 8, F[1]);
+    p.rect(cx + 2, cy + 2, 4, 4, F[3]);
+    p.px(cx + 3, cy + 3, F[4]);
+  }
+  // punch the middle back out — the frame is a ring
+  const ix = off, iy = off;
+  p.x.clearRect(ix, iy, w - ix * 2, h - iy * 2);
+  return { canvas: p.canvas, inset: off };
+}
+
+/** Heavy striped curtain hung on a rail, for a back wall. */
+export function curtain(w, h) {
+  const p = new P(w, h);
+  const C1 = R.roomBrick[2], C2 = R.roomBrick[3];
+  // rail
+  p.rect(0, 0, w, 4, R.frameWood[2]);
+  p.rect(0, 0, w, 1, R.frameWood[3]);
+  p.rect(0, 3, w, 1, R.frameWood[1]);
+  // pleats
+  for (let x = 0; x < w; x++) {
+    const band = ((x / 5) | 0) % 2;
+    p.rect(x, 4, 1, h - 6, band ? C1 : C2);
+    if (x % 5 === 0) p.rect(x, 4, 1, h - 6, R.roomBrick[1]);
+    if (x % 5 === 2) p.rect(x, 4, 1, Math.round((h - 6) * 0.35), R.roomBrick[4]);
+  }
+  // hem
+  p.rect(0, h - 3, w, 3, R.roomBrick[1]);
+  p.rect(0, h - 3, w, 1, R.roomBrick[2]);
+  // frame around the whole hanging
+  p.frame(0, 0, w, h, R.frameWood[1]);
+  p.frame(1, 1, w - 2, h - 2, R.frameWood[3]);
+  outline(p.canvas, '#120301');
+  return p.canvas;
+}
+
+/**
+ * Wall-hung cabinet: a plank shelf on brackets carrying a ledger, a slate and
+ * a strongbox — the sort of clutter that makes a back wall feel worked in.
+ */
+export function wallCabinet(seed = 1) {
+  const p = new P(58, 30);
+  const W = R.frameWood;
+  // back board
+  p.rect(2, 4, 54, 20, W[1]);
+  p.rect(2, 4, 54, 1, W[2]);
+  // shaped pediment
+  p.rect(10, 1, 8, 4, W[1]);
+  p.rect(11, 0, 6, 2, R.roomBrick[3]);
+  p.rect(26, 1, 10, 3, W[1]);
+  p.px(30, 0, W[3]); p.px(31, 0, W[3]);
+  // open ledger
+  p.rect(6, 9, 20, 12, R.cream[3]);
+  p.rect(6, 9, 20, 1, R.cream[4]);
+  p.vline(16, 9, 12, R.roomBrick[2]);
+  for (let ry = 11; ry < 20; ry += 2) {
+    p.hline(8, ry, 6, R.frameWood[1]);
+    p.hline(18, ry, 6, R.frameWood[1]);
+  }
+  p.rect(5, 8, 22, 1, R.roomBrick[2]);
+  // quill + inkpot
+  p.line(27, 8, 30, 16, R.cream[4]);
+  p.ellipse(29, 20, 2, 2, R.gold[2]);
+  // slate board
+  p.rect(31, 10, 20, 11, R.night[0]);
+  p.frame(31, 10, 20, 11, W[2]);
+  for (let k = 0; k < 9; k++)
+    p.px(33 + ((hash2(k, seed, 3) * 16) | 0), 12 + ((hash2(k, seed, 4) * 7) | 0), R.moon[2]);
+  // strongbox
+  p.rect(52, 9, 5, 12, R.roomBrick[2]);
+  p.rect(52, 9, 5, 1, R.roomBrick[3]);
+  p.px(54, 15, R.gold[3]);
+  // shelf + brackets
+  p.rect(2, 21, 54, 3, W[2]);
+  p.rect(2, 21, 54, 1, W[3]);
+  for (const bx of [6, 26, 48]) { p.rect(bx, 24, 2, 4, W[1]); p.px(bx, 27, W[0]); }
+  outline(p.canvas, '#120301');
+  return p.canvas;
+}
+
 /** Interior window with night outside and a warm sill. */
 export function interiorWindow(lit = true) {
   const p = new P(28, 30);
@@ -1386,7 +1493,7 @@ export function interiorWindow(lit = true) {
 /** Stone hearth with a live fire. */
 export function fireplace(frame = 0) {
   const p = new P(46, 44);
-  const S = R.brick;
+  const S = R.roomBrick;   // warm interior brick, not the cold exterior ramp
   p.rect(0, 0, 46, 40, S[2]);
   for (let y = 2; y < 40; y += 5) {
     p.hline(0, y, 46, S[1]);
