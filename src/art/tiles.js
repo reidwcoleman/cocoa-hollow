@@ -47,6 +47,45 @@ function snowTile(p, seed) {
  * Cobbles built from a Voronoi cell map so the setts are round and irregular
  * and never read as a brick wall the way a row layout does.
  */
+/**
+ * Town paving: pale periwinkle flagstones in offset courses with bright joints.
+ * It reads *lighter* than the surrounding snow, which is what makes a cleared
+ * square look swept rather than like a hole in the ground.
+ */
+function flagstoneTile(p, seed) {
+  p.rect(0, 0, TS, TS, R.snow[2]);            // blue grout between the flags
+  const rowH = 8;
+  for (let ry = 0; ry < TS; ry += rowH) {
+    const r = (ry / rowH) | 0;
+    const off = (r + seed) % 2 ? 5 : 0;       // running bond
+    for (let fx = -8; fx < TS; fx += 8) {
+      const x = fx + off, y = ry;
+      const k = (x * 7 + y * 13 + seed * 31) | 0;
+      const b = 2 + Math.round(hash2(k, seed, 251) * 1.8 - 0.4);
+      p.rect(x + 1, y + 1, 6, 6, R.pave[Math.max(1, Math.min(4, b))]);
+      // lit top-left edge, shaded bottom-right
+      p.hline(x + 1, y + 1, 6, R.pave[Math.min(4, b + 1)]);
+      p.vline(x + 1, y + 1, 6, R.pave[Math.min(4, b + 1)]);
+      p.hline(x + 1, y + 6, 6, R.pave[Math.max(0, b - 2)]);
+      p.vline(x + 6, y + 1, 6, R.pave[Math.max(0, b - 2)]);
+      // a little wear
+      if (hash2(k, seed, 252) > 0.7)
+        p.px(x + 2 + ((hash2(k, seed, 253) * 4) | 0), y + 2 + ((hash2(k, seed, 254) * 4) | 0),
+             R.pave[Math.max(0, b - 1)]);
+    }
+  }
+  // a few flags sunk deeper into shadow
+  for (let y = 0; y < TS; y++)
+    for (let x = 0; x < TS; x++)
+      if (hash2(x + seed * 5, y + seed * 3, 255) > 0.965) p.px(x, y, R.snow[1]);
+  // drifted snow creeping across
+  for (let y = 0; y < TS; y++)
+    for (let x = 0; x < TS; x++) {
+      const n = wrapNoise(x / 4, y / 4, 4, 560 + seed);
+      if (n > 0.80) p.px(x, y, R.snow[3]);
+    }
+}
+
 function cobbleTile(p, seed, snowy = true) {
   // Explicitly drawn rounded setts on a jittered 3x3 grid. Drawing each stone
   // (rather than deriving them from a distance field) is what makes them
@@ -322,9 +361,9 @@ function variants(name, n, fn) {
 
 export function buildTiles() {
   variants('snow', 6, snowTile);
-  variants('cobble', 5, (p, s) => cobbleTile(p, s, true));
-  variants('cobbleEdge', 5, (p, s) => { cobbleTile(p, s, true); snowOver(p, s, 0.62); });
-  variants('cobbleEdge2', 5, (p, s) => { cobbleTile(p, s, true); snowOver(p, s, 0.34); });
+  variants('cobble', 6, flagstoneTile);
+  variants('cobbleEdge', 6, (p, s) => { flagstoneTile(p, s); snowOver(p, s, 0.55); });
+  variants('cobbleEdge2', 6, (p, s) => { flagstoneTile(p, s); snowOver(p, s, 0.28); });
   variants('cobbleBare', 4, (p, s) => cobbleTile(p, s, false));
   variants('path', 5, pathTile);
   variants('castleFloor', 5, castleFloorTile);

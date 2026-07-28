@@ -357,45 +357,91 @@ export function castleShop() {
  * SCENERY
  * ================================================================== */
 
-export function pineTree(size = 1, snowy = true, seed = 1) {
-  const w = Math.round(34 * size), h = Math.round(62 * size);
+/**
+ * Conifer built from overlapping jagged needle tufts rather than smooth
+ * triangles — at this scale the silhouette is most of the read, and a clean
+ * cone looks like a Christmas-tree icon instead of a tree.
+ */
+export function pineTree(size = 1, snowy = true, seed = 1, hue = 'pine') {
+  const w = Math.round(58 * size), h = Math.round(112 * size);
   const p = new P(w, h);
   const cx = w >> 1;
-  // trunk
-  p.rect(cx - 2, h - 14, 5, 14, R.bark[1]);
-  p.rect(cx - 2, h - 14, 2, 14, R.bark[2]);
-  p.rect(cx + 2, h - 14, 1, 14, R.bark[0]);
-  // roots
-  p.rect(cx - 5, h - 3, 11, 3, R.bark[1]);
-  // layered boughs
-  const tiers = 5;
-  for (let t = 0; t < tiers; t++) {
-    const ty = h - 16 - t * Math.round((h - 22) / tiers);
-    const rad = Math.round((w / 2 - 1) * (1 - t / tiers) * 0.95) + 2;
-    for (let i = 0; i < 10; i++) {
-      const yy = ty - i;
-      const rr = Math.max(1, Math.round(rad * (1 - i / 11)));
-      const shade = i < 3 ? 1 : i < 6 ? 2 : 3;
-      p.rect(cx - rr, yy, rr * 2 + 1, 1, R.pine[shade]);
+  const PN = R[hue] || R.pine;
+  const trunkH = Math.round(h * 0.09);
+
+  // trunk + root flare
+  p.rect(cx - 4, h - trunkH, 9, trunkH, R.bark[1]);
+  p.rect(cx - 4, h - trunkH, 3, trunkH, R.bark[2]);
+  p.rect(cx + 4, h - trunkH, 1, trunkH, R.bark[0]);
+  for (let i = 0; i < 4; i++) {
+    p.px(cx - 4 - i, h - 4 + Math.round(i * 0.7), R.bark[1]);
+    p.px(cx + 4 + i, h - 4 + Math.round(i * 0.7), R.bark[1]);
+  }
+  p.ellipse(cx, h - 2, 9, 2, R.bark[0]);
+
+  /** one downward-drooping needle tuft */
+  const tuft = (x, y, len, dir, shade) => {
+    for (let i = 0; i < len; i++) {
+      const yy = y + Math.round(i * 0.55);
+      const xx = x + dir * i;
+      p.px(xx, yy, PN[shade]);
+      p.px(xx, yy + 1, PN[Math.max(0, shade - 1)]);
+      if (i % 2 === 0) p.px(xx, yy - 1, PN[Math.min(4, shade + 1)]);
     }
-    // needle jags along the bottom edge
-    for (let x = -rad; x <= rad; x += 2)
-      if (hash2(x, t + seed, 5) > 0.4) p.px(cx + x, ty + 1, R.pine[1]);
-    if (snowy) {
-      for (let i = 3; i < 9; i++) {
-        const yy = ty - i;
-        const rr = Math.max(1, Math.round(rad * (1 - i / 11)));
-        if (fnoise(i / 2, t + seed, 7) > 0.42)
-          p.rect(cx - rr + 1, yy, Math.max(1, rr * 2 - 1), 1, R.snow[i > 6 ? 4 : 3]);
+  };
+
+  const tiers = Math.round(11 * size);
+  const top = Math.round(h * 0.045);
+  for (let t = 0; t < tiers; t++) {
+    const f = t / (tiers - 1);                       // 0 at top, 1 at base
+    const ty = top + Math.round(f * (h - trunkH - top + 8) * 0.74);
+    const rad = Math.max(3, Math.round((w / 2 - 2) * Math.pow(f, 0.72)));
+    const jitter = (hash2(t, seed, 11) - 0.5) * 3;
+
+    // Each tier is drawn column by column down to a *ragged* skirt line. The
+    // raggedness is the whole read — a clean skirt edge looks like a plastic
+    // Christmas tree rather than a conifer.
+    const depth = Math.max(5, Math.round(rad * 0.95));
+    const snowCover = hash2(t, seed, 17) > 0.18;
+    for (let n = -rad; n <= rad; n++) {
+      const a = Math.abs(n) / rad;
+      // a bough droops away from the trunk: both its upper and lower surfaces
+      // slope down as they run out, and both edges are jagged
+      const jagT = Math.round((hash2(n + 40, t + seed * 7, 21) - 0.5) * 2.4);
+      const jagB = Math.round((hash2(n + 90, t + seed * 3, 22) - 0.35) * 3.4);
+      const colTop = ty + Math.round(depth * 0.9 * Math.pow(a, 1.25)) + jagT;
+      const thick = Math.max(2, Math.round(depth * (0.62 - 0.34 * a)));
+      const colBottom = colTop + thick + jagB;
+      const x = cx + n + jitter;
+      for (let y = colTop; y <= colBottom; y++) {
+        const v = (y - colTop) / Math.max(1, colBottom - colTop);
+        // lit on the upper-left, shadow gathering under and to the right
+        let shade = v < 0.34 ? 3 : v < 0.7 ? 2 : 1;
+        if (n < -rad * 0.15 && v < 0.55) shade = Math.min(4, shade + 1);
+        if (n > rad * 0.4) shade = Math.max(0, shade - 1);
+        p.px(x, y, PN[shade]);
       }
-      for (let x = -rad; x <= rad; x += 3)
-        if (hash2(x, t + seed, 8) > 0.55) p.px(cx + x, ty - 2, R.snow[4]);
+      // dark lip along the underside
+      p.px(x, colBottom, PN[0]);
+      // needles poking past the silhouette
+      if (hash2(n, t + seed * 5, 13) > 0.6)
+        tuft(x, colBottom - 1, 2, n < 0 ? -1 : 1, 1);
+
+      if (snowCover && hash2(n, t + seed, 18) > 0.28) {
+        // snow settles on the upper surface, patchy and thinning outward
+        const cap = Math.max(1, Math.round((1 - a) * 2.4));
+        for (let k = 0; k < cap && colTop + k <= colBottom; k++)
+          p.px(x, colTop + k, R.snow[k === 0 ? 4 : 3]);
+      }
     }
   }
+
   // tip
-  p.vline(cx, 1, 4, R.pine[3]);
-  if (snowy) p.px(cx, 1, R.snow[4]);
-  outline(p.canvas, '#06050c');
+  p.vline(cx, top - 3, 5, PN[3]);
+  p.px(cx, top - 4, PN[4]);
+  if (snowy) { p.px(cx, top - 4, R.snow[4]); p.px(cx, top - 3, R.snow[3]); }
+
+  outline(p.canvas, '#050212');
   return p.canvas;
 }
 

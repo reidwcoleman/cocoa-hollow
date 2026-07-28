@@ -3,25 +3,28 @@
 // warm amber lamplight, rich cocoa browns, pale spectral cyan.
 // Every ramp goes darkest -> lightest so shading code can index consistently.
 
+/* Ramps below are sampled from reference winter-town / moonlit-forest pixel art
+ * rather than invented, which is why the snow is periwinkle with saturated
+ * blue shadows and the paving is *lighter* than the snow, not darker. */
 export const RAMP = {
   // --- night & sky ---
-  void:    ['#05050c', '#0a0a16', '#10101f', '#171729', '#1f1f36'],
-  night:   ['#12122a', '#1b1b3a', '#25254e', '#323265', '#41417e'],
-  violet:  ['#241435', '#35204d', '#4a2d68', '#5f3b83', '#7a4fa4'],
-  moon:    ['#5c6ba8', '#8a97cf', '#b8c2ec', '#dfe4fa', '#ffffff'],
+  void:    ['#050212', '#0a0620', '#120c32', '#1a1245', '#241a5c'],
+  night:   ['#020044', '#0c2bc3', '#1f0a9f', '#2836d6', '#4050d7'],
+  violet:  ['#1f0a4a', '#341570', '#4a2496', '#6039bd', '#7f57dd'],
+  moon:    ['#4f77eb', '#8fa6ff', '#b1adfe', '#d8d6fb', '#ffffff'],
 
   // --- snow & stone ---
-  snow:    ['#7986ae', '#9aa6cc', '#bcc6e6', '#dbe2f6', '#f6f9ff'],
-  stone:   ['#38384f', '#4b4b68', '#63637f', '#7e7e9c', '#9e9eba'],
-  // ground paving — deliberately darker/warmer than `stone` so snow reads bright
-  pave:    ['#37304a', '#4e4660', '#635873', '#786c8a', '#8f83a2'],
-  brick:   ['#3c2f43', '#513e59', '#67506f', '#7f6488', '#9a82a2'],
-  slate:   ['#232338', '#31314c', '#414162', '#53537a', '#68689a'],
+  snow:    ['#3a44c0', '#6082ff', '#96a8ff', '#c9c7ff', '#e6e8ff'],
+  stone:   ['#3f4a92', '#5f6fc4', '#8290e2', '#a7b0f2', '#cdd2ff'],
+  // paving is brighter than the snow it sits in — pale periwinkle flags
+  pave:    ['#7c86d8', '#a3aaf0', '#c4c6fb', '#d8daff', '#eef1ff'],
+  brick:   ['#3b1f3f', '#5a2f52', '#7a4468', '#9a5c80', '#b87a9c'],
+  slate:   ['#181546', '#241d68', '#33298c', '#4438ad', '#5a4dcc'],
 
   // --- wood & interior ---
-  wood:    ['#241318', '#3a2026', '#512d33', '#6b3f41', '#8a5751'],
-  oak:     ['#2e1d13', '#48301d', '#63452a', '#82603c', '#a67e53'],
-  floor:   ['#33202a', '#4a303c', '#5f4050', '#775468', '#8e6a80'],
+  wood:    ['#241009', '#3e1e17', '#4a251b', '#622d1f', '#8c4521'],
+  oak:     ['#331818', '#572a1e', '#70391b', '#9e5b37', '#c16d43'],
+  floor:   ['#2a1116', '#42201f', '#5a2c26', '#743c31', '#8f5340'],
 
   // --- chocolate ---
   cocoa:   ['#1d0f0c', '#301813', '#46241a', '#5e3324', '#7a4630'],
@@ -31,19 +34,22 @@ export const RAMP = {
   caramel: ['#4a2510', '#6e3a17', '#94551f', '#bb7430', '#dd9c4c'],
 
   // --- light & fire ---
-  ember:   ['#4a1a06', '#7d3208', '#b35510', '#e0871f', '#ffc35a'],
-  lamp:    ['#7a4a0e', '#b8761a', '#e8a832', '#ffd066', '#fff0bb'],
-  flame:   ['#8a2408', '#c74a10', '#f08326', '#ffbb50', '#fff2b0'],
+  ember:   ['#5a1b06', '#a53025', '#c85f1d', '#f0a52a', '#ffd85a'],
+  lamp:    ['#7a3a08', '#c85f1d', '#f0a52a', '#faea61', '#fff8b0'],
+  flame:   ['#8a2408', '#c85f1d', '#f0a52a', '#faea61', '#fff8b0'],
 
   // --- spectral ---
-  ghost:   ['#2b4a5e', '#3f6d86', '#5c98b3', '#8fc9dc', '#d6f4ff'],
+  ghost:   ['#1e4e86', '#2b7bf4', '#52a5f3', '#a8d8ff', '#ffffff'],
   wisp:    ['#3a2a6a', '#54409c', '#7460cc', '#a394ee', '#dcd4ff'],
   toxic:   ['#123a2a', '#1c5c3f', '#2a8657', '#48b477', '#7fe0a4'],
 
   // --- flora ---
-  pine:    ['#163429', '#204a3a', '#2c6650', '#3b8468', '#51a383'],
-  bark:    ['#241a14', '#372a20', '#4d3a2c', '#65503c', '#806753'],
-  leaf:    ['#22412a', '#2e5a35', '#3e7844', '#519b55', '#6cbe6c'],
+  pine:    ['#00062f', '#001a4d', '#003b73', '#1e7ab3', '#52a5f3'],
+  // a mintier conifer so a stand of trees isn't all one hue
+  pineB:   ['#022630', '#054a52', '#0d7a78', '#2ba79b', '#5fd0bd'],
+  pineC:   ['#0a1140', '#152a7a', '#2749b8', '#4f7bea', '#8fb0ff'],
+  bark:    ['#1e1020', '#3a2020', '#5a3324', '#7c4a2c', '#a06a3e'],
+  leaf:    ['#062b3a', '#0d4a5e', '#166f84', '#2b96b0', '#57bcd0'],
 
   // --- flesh ---
   skinA:   ['#4a2a26', '#6e433a', '#94614f', '#bb8468', '#dcab8a'],
@@ -51,12 +57,12 @@ export const RAMP = {
   skinC:   ['#5a3520', '#7d4e2e', '#a06b41', '#c08e5c', '#dbb183'],
 
   // --- fabric ---
-  plum:    ['#2a1030', '#3f1a47', '#571f5f', '#70307a', '#8c4a95'],
-  teal:    ['#0e2a30', '#153f47', '#1e5a63', '#2a7d84', '#3fa5a8'],
+  plum:    ['#0b0c89', '#1e41d3', '#4575ff', '#759eff', '#c7b7ff'],
+  teal:    ['#04303a', '#0a5560', '#107a86', '#2ba0aa', '#4fc6ce'],
   rose:    ['#3d1524', '#5c2135', '#803049', '#a4475f', '#c66a7c'],
   gold:    ['#54380c', '#7d5514', '#a87a20', '#d0a437', '#f0cc6a'],
   cream:   ['#6b5a4a', '#8f7a64', '#b39c82', '#d4c1a6', '#f2e6d0'],
-  ink:     ['#0d0d16', '#16162a', '#22223e', '#303055', '#42426f'],
+  ink:     ['#08040f', '#12061e', '#1c0f30', '#2a1a48', '#3d2a64'],
 };
 
 // Flat named colors for UI / effects.

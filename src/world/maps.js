@@ -54,7 +54,12 @@ export const ART = {};
 export function buildArt() {
   ART.lamp = PR.lampPost();
   ART.fountain = PR.fountain();
-  ART.pine = [PR.pineTree(1.0, true, 1), PR.pineTree(1.25, true, 2), PR.pineTree(0.8, true, 3), PR.pineTree(1.1, true, 4)];
+  ART.pine = [
+    PR.pineTree(0.95, true, 1, 'pine'),  PR.pineTree(1.20, true, 2, 'pineB'),
+    PR.pineTree(0.75, true, 3, 'pineC'), PR.pineTree(1.05, true, 4, 'pine'),
+    PR.pineTree(0.62, true, 5, 'pineB'), PR.pineTree(1.35, true, 6, 'pineC'),
+    PR.pineTree(0.88, true, 7, 'pineB'), PR.pineTree(1.12, true, 8, 'pine'),
+  ];
   ART.pineBare = [PR.pineTree(1.0, false, 5), PR.pineTree(1.2, false, 6)];
   ART.bare = [PR.bareTree(1), PR.bareTree(2)];
   ART.bush = [PR.bush(true, 1), PR.bush(true, 2), PR.bush(false, 3)];
@@ -431,7 +436,7 @@ export function buildKitchen() {
 export function buildGrove() {
   const W = 76, H = 52;
   const m = new GameMap('grove', W, H, { base: 'snow', name: 'The Hollow Grove' });
-  m.ambient = { key: 'night', amount: 0.58, tint: '#24365e', bloom: 0.8, vignetteAmt: 0.44 };
+  m.ambient = { key: 'night', amount: 0.44, tint: '#2b3f86', bloom: 0.75, vignetteAmt: 0.40 };
 
   // deep snow, with bare ground only where the canopy is thickest
   for (let y = 0; y < H; y++)
@@ -459,11 +464,11 @@ export function buildGrove() {
   }
 
   // dense pine border + scattered interior
-  for (let i = 0; i < 900; i++) {
+  for (let i = 0; i < 780; i++) {
     const tx = ((hash2(i, 11, 3) * W) | 0), ty = ((hash2(i, 12, 4) * H) | 0);
     if (!m.inb(tx, ty) || m.isSolid(tx, ty)) continue;
     const edge = tx < 5 || ty < 4 || tx > W - 6 || ty > H - 5;
-    const dense = edge || hash2(i, 13, 5) < 0.62;
+    const dense = edge || hash2(i, 13, 5) < 0.72;
     if (!dense) continue;
     if (m.ground[m.idx(tx, ty)] === 'path' && !edge) continue;
     const roll = hash2(i, 14, 6);
