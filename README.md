@@ -68,7 +68,7 @@ walk away. Higher-star stock also draws bigger crowds.
 index.html          canvas + error reporting
 main.js             boot, scene harness, capture mode
 server.py           static server + /shot endpoint used by the art harness
-test.html/.js       23-check self test over every system
+test.html/.js       34-check self test over every system
 
 src/
   engine/core.js    screen scaling, input, fixed-step loop, camera
@@ -85,7 +85,8 @@ src/
     particles.js    snowfall, smoke, bursts, floating text
   world/maps.js     the town, shop, kitchen and grove
   entities.js       player, enemies, boss, townsfolk, ghosts, customers
-  data.js           ingredients, recipes, townsfolk
+  data.js           ingredients, recipes, townsfolk, vendors
+  gear.js           weapons, build-defining off-hands, bows, loot tables
   ui.js             HUD and every panel
   game.js           state, simulation, render pipeline
   audio.js          synthesised SFX + an ambient music bed
