@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
+<title>Cocoa Hollow</title>
+<style>
+  html,body{margin:0;padding:0;height:100%;background:#07070d;overflow:hidden;
+    font-family:ui-monospace,Menlo,monospace;color:#cfc3e6;}
+  #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;}
+  canvas{image-rendering:pixelated;image-rendering:crisp-edges;display:block;
+    box-shadow:0 0 80px rgba(0,0,0,.9);}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    flex-direction:column;gap:14px;background:#07070d;z-index:10;letter-spacing:.18em;font-size:12px}
+  #boot.hide{opacity:0;pointer-events:none;transition:opacity .6s}
+  #err{position:fixed;left:0;right:0;bottom:0;max-height:45%;overflow:auto;background:#20101a;
+    color:#ffb3c1;font-size:11px;padding:8px 12px;white-space:pre-wrap;display:none;z-index:20}
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="game"></canvas></div>
+<div id="boot"><div>COCOA HOLLOW</div><div style="opacity:.5">loading the moonlight…</div></div>
+<pre id="err"></pre>
+<script>
+  function reportErr(txt) {
+    const el = document.getElementById('err');
+    el.style.display = 'block';
+    el.textContent += txt + '\n';
+    const q = new URLSearchParams(location.search);
+    if (q.has('shot')) {
+      fetch('/shot', { method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ name: q.get('shot') + '_ERROR', text: el.textContent }) });
+    }
+  }
+  window.addEventListener('error', e => {
+    reportErr(e.message + '\n  ' + (e.filename||'') + ':' + (e.lineno||'') + '\n' + ((e.error&&e.error.stack)||''));
+  });
+  window.addEventListener('unhandledrejection', e => {
+    const el = document.getElementById('err');
+    el.style.display = 'block';
+    reportErr("promise: " + ((e.reason && e.reason.stack) || e.reason));
+  });
+</script>
+<script type="module" src="./main.js"></script>
+</body>
+</html>
