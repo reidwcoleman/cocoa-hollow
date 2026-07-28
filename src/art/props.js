@@ -14,121 +14,138 @@ const R = RAMP;
  * Gothic snow-capped townhouse.
  * opts: { w, h, wall, roof, windows, chimneys, sign, door, storeys }
  */
+/**
+ * Snowbound townhouse drawn the way the reference does it: a large, bright
+ * shingled roof *plane* dominating the shape, sitting over a much darker
+ * violet masonry facade. The value split between roof and wall is what makes
+ * these read as buildings seen from above rather than flat elevations.
+ */
 export function townhouse(opts = {}) {
-  const w = opts.w || 64, bodyH = opts.h || 48;
-  const roofH = opts.roofH || Math.round(w * 0.42);
-  const H = bodyH + roofH + 6;
-  const p = new P(w, H);
-  const WALL = R[opts.wall || 'cream'];
-  const ROOF = R[opts.roof || 'brick'];
+  const w = opts.w || 72;
+  const facH = opts.facadeH || 34;
+  const roofH = opts.roofH || Math.round(w * 0.62);
+  const eave = 4;
+  const H = roofH + facH + 10;
+  const p = new P(w + eave * 2, H);
+  const OX = eave;                                  // origin of the facade
+  const ROOF = R[opts.roof || 'plum'];
+  const WALL = R[opts.wall || 'masonry'];
   const TRIM = R[opts.trim || 'wood'];
+  const SNOW = R.snowRoof;
   const seed = opts.seed || 3;
-  const top = roofH + 4;
+  const facY = roofH + 2;
+  const baseY = facY + facH;
+  const lights = [], smokes = [];
 
-  /* ---- body ---- */
-  p.rect(0, top, w, bodyH, WALL[2]);
-  p.rect(0, top, 1, bodyH, WALL[1]);
-  p.rect(w - 1, top, 1, bodyH, WALL[1]);
-  p.rect(1, top, w - 2, 1, WALL[3]);
-  // plaster grain
-  for (let y = top; y < top + bodyH; y++)
-    for (let x = 0; x < w; x++)
-      if (hash2(x, y, seed) > 0.9) p.px(x, y, WALL[hash2(x, y, seed + 1) > 0.5 ? 3 : 1]);
-  // shadow gradient at base
-  p.rect(0, top + bodyH - 4, w, 4, mix(WALL[1], R.night[1], 0.35));
-  p.rect(0, top + bodyH - 2, w, 2, mix(WALL[0], R.night[0], 0.5));
-
-  /* ---- half-timber framing ---- */
-  const beams = opts.timber !== false;
-  if (beams) {
-    p.rect(0, top, 3, bodyH, TRIM[2]);
-    p.rect(w - 3, top, 3, bodyH, TRIM[2]);
-    p.rect(0, top, 3, bodyH, TRIM[2]);
-    p.rect(1, top, 1, bodyH, TRIM[3]);
-    p.rect(w - 2, top, 1, bodyH, TRIM[1]);
-    const mid = top + Math.round(bodyH * 0.55);
-    p.rect(0, mid, w, 3, TRIM[2]);
-    p.rect(0, mid, w, 1, TRIM[3]);
-    p.rect(0, mid + 2, w, 1, TRIM[1]);
-    // diagonal braces
-    for (let i = 0; i < 10; i++) {
-      p.px(4 + i, mid - 4 - i, TRIM[2]); p.px(5 + i, mid - 4 - i, TRIM[2]);
-      p.px(w - 5 - i, mid - 4 - i, TRIM[2]); p.px(w - 6 - i, mid - 4 - i, TRIM[2]);
+  /* ---------------- facade ---------------- */
+  p.rect(OX, facY, w, facH, WALL[3]);
+  for (let y = facY; y < baseY; y++)
+    for (let x = OX; x < OX + w; x++) {
+      const n = fnoise(x / 7, y / 7, seed);
+      if (n > 0.64) p.px(x, y, WALL[4]);
+      else if (n < 0.36) p.px(x, y, WALL[2]);
     }
+  // coursed stone
+  for (let y = facY + 5; y < baseY; y += 6) {
+    p.hline(OX, y, w, WALL[1]);
+    for (let x = OX + (((y / 6) | 0) % 2) * 7; x < OX + w; x += 14) p.vline(x, y - 5, 5, WALL[1]);
   }
+  p.rect(OX, facY, 1, facH, WALL[4]);
+  p.rect(OX + w - 1, facY, 1, facH, WALL[1]);
+  // the wall falls into shadow at its base, where snow banks against it
+  p.rect(OX, baseY - 5, w, 5, WALL[1]);
+  p.rect(OX, baseY - 2, w, 2, WALL[0]);
+  p.rect(OX - 2, baseY - 1, w + 4, 3, R.snow[2]);
+  p.rect(OX - 2, baseY - 1, w + 4, 1, R.snow[3]);
 
-  /* ---- windows ---- */
-  const winList = opts.windows || [[Math.round(w * 0.22), top + 8], [Math.round(w * 0.66), top + 8]];
-  const lights = [];
-  for (const [wx, wy] of winList) {
-    gothicWindow(p, wx, wy, opts.winW || 12, opts.winH || 16, opts.lit !== false);
-    lights.push([wx + (opts.winW || 12) / 2, wy + (opts.winH || 16) / 2, 34, opts.lit !== false]);
+  /* ---------------- warm windows + door ---------------- */
+  const winY = facY + Math.round(facH * 0.28);
+  const wins = opts.windows || [Math.round(w * 0.16), Math.round(w * 0.62)];
+  for (const wx of wins) {
+    const X = OX + wx, ww = opts.winW || 13, wh = opts.winH || 15;
+    p.rect(X - 2, winY - 2, ww + 4, wh + 4, TRIM[1]);
+    p.rect(X - 1, winY - 1, ww + 2, wh + 2, TRIM[3]);
+    p.rect(X, winY, ww, wh, R.lamp[2]);
+    p.rect(X + 1, winY + 1, ww - 2, Math.round(wh * 0.45), R.lamp[3]);
+    p.rect(X + 2, winY + 2, 4, 3, R.lamp[4]);
+    p.rect(X, winY + wh - 4, ww, 3, R.lamp[1]);
+    p.vline(X + ((ww / 2) | 0), winY, wh, TRIM[2]);
+    p.hline(X, winY + ((wh / 2) | 0), ww, TRIM[2]);
+    p.rect(X - 3, winY + wh + 2, ww + 6, 2, TRIM[2]);
+    p.rect(X - 3, winY + wh + 1, ww + 6, 1, R.snow[4]);
+    lights.push([X + ww / 2, winY + wh / 2, 46, true]);
   }
-
-  /* ---- door ---- */
   if (opts.door !== false) {
-    const dx = opts.doorX != null ? opts.doorX : Math.round(w / 2 - 7);
-    const dy = top + bodyH - 22;
-    doorArched(p, dx, dy, 14, 22, TRIM);
-    lights.push([dx + 7, dy + 4, 20, true]);
+    const dx = OX + (opts.doorX != null ? opts.doorX : Math.round(w / 2 - 7));
+    const dy = baseY - 21;
+    p.rect(dx - 2, dy - 3, 18, 24, WALL[4]);
+    p.rect(dx, dy, 14, 21, TRIM[1]);
+    for (let i = 0; i < 4; i++) p.rect(dx + (4 - i), dy - 4 + i, 14 - (4 - i) * 2, 1, TRIM[1]);
+    for (let px2 = dx + 2; px2 < dx + 14; px2 += 4) p.vline(px2, dy - 3, 24, TRIM[0]);
+    p.rect(dx, dy, 1, 21, TRIM[2]);
+    p.px(dx + 11, dy + 11, R.gold[3]);
+    // lamp over the door
+    p.rect(dx + 6, dy - 9, 3, 4, R.lamp[3]);
+    p.px(dx + 7, dy - 8, R.lamp[4]);
+    lights.push([dx + 7, dy - 7, 34, true]);
   }
 
-  /* ---- roof ---- */
-  const eaves = 3;
+  /* ---------------- roof plane ---------------- */
+  const ridgeHalf = Math.max(2, Math.round(w * 0.06));
   for (let i = 0; i < roofH; i++) {
-    const inset = Math.round((i / roofH) * (w / 2 - 2));
-    const x0 = inset - eaves, len = w - inset * 2 + eaves * 2;
-    const shade = i < 2 ? 3 : i < roofH * 0.5 ? 2 : 1;
-    p.rect(x0, top - i + 3, len, 1, ROOF[shade]);
-    // shingle notches
-    if (i % 3 === 0) for (let s = 0; s < len; s += 5)
-      p.px(x0 + s + (i % 6 === 0 ? 2 : 0), top - i + 3, ROOF[Math.max(0, shade - 1)]);
-  }
-  // snow on the roof
-  for (let i = 0; i < roofH; i++) {
-    const inset = Math.round((i / roofH) * (w / 2 - 2));
-    const x0 = inset - eaves, len = w - inset * 2 + eaves * 2;
-    const yy = top - i + 3;
-    const cover = fnoise(i / 4, seed, 5);
-    if (i > roofH * 0.25 && cover > 0.34) {
-      const l = Math.round(len * Math.min(1, (cover - 0.2) * 2.2));
-      p.rect(x0 + ((len - l) >> 1), yy, l, 1, R.snow[i > roofH * 0.6 ? 4 : 3]);
+    const t = i / (roofH - 1);
+    const half = Math.round(ridgeHalf + (w / 2 + eave - ridgeHalf) * Math.pow(t, 0.86));
+    const y = 3 + i;
+    const x0 = OX + w / 2 - half;
+    const len = half * 2;
+    // shingle courses: a lit band, then progressively deeper tone
+    const c = i % 6;
+    let shade = c === 0 ? 4 : c < 3 ? 3 : c < 5 ? 2 : 1;
+    if (t > 0.86) shade = Math.max(1, shade - 1);          // eaves fall into shade
+    p.rect(x0, y, len, 1, ROOF[shade]);
+    // scalloped shingle tips every course
+    if (c === 5)
+      for (let sx = 0; sx < len; sx += 5)
+        p.px(x0 + sx + (((i / 6) | 0) % 2 ? 2 : 0), y, ROOF[0]);
+    // snow lying along the top of each course
+    if (t > 0.12 && fnoise(i / 3.5, seed, 7) > 0.36) {
+      const inset = 1 + ((hash2(i, seed, 9) * 3) | 0);
+      const sl = Math.max(1, len - inset * 2);
+      p.rect(x0 + inset, y, sl, 1, SNOW[c === 0 ? 4 : 3]);
+      if (c === 1) p.rect(x0 + inset + 1, y, Math.max(1, sl - 2), 1, SNOW[2]);
     }
   }
-  // ridge cap + icicles
-  p.rect(Math.round(w / 2 - 3), top - roofH + 3, 6, 2, R.snow[4]);
-  for (let x = 0; x < w; x += 3) {
-    if (hash2(x, seed, 17) > 0.55) {
-      const len = 2 + ((hash2(x, seed, 18) * 3) | 0);
-      p.vline(x, top + 3, len, R.moon[2]);
-      p.px(x, top + 3 + len, R.moon[3]);
+  // ridge cap
+  p.rect(OX + w / 2 - ridgeHalf - 1, 2, ridgeHalf * 2 + 2, 3, ROOF[4]);
+  p.rect(OX + w / 2 - ridgeHalf - 1, 1, ridgeHalf * 2 + 2, 2, SNOW[4]);
+  // eave board + icicles
+  p.rect(OX - eave, facY - 3, w + eave * 2, 3, TRIM[1]);
+  p.rect(OX - eave, facY - 3, w + eave * 2, 1, TRIM[3]);
+  for (let x = 0; x < w + eave * 2; x += 3)
+    if (hash2(x, seed, 17) > 0.5) {
+      const len = 2 + ((hash2(x, seed, 18) * 4) | 0);
+      p.vline(OX - eave + x, facY, len, R.moon[2]);
+      p.px(OX - eave + x, facY + len, R.moon[3]);
     }
-  }
-  // eave board
-  p.rect(-eaves, top + 2, w + eaves * 2, 2, TRIM[1]);
-  p.rect(-eaves, top + 2, w + eaves * 2, 1, TRIM[3]);
 
-  /* ---- chimneys ---- */
-  const chims = opts.chimneys || [Math.round(w * 0.7)];
-  const smokes = [];
-  for (const cx of chims) {
-    const ch = 12 + ((hash2(cx, seed, 23) * 6) | 0);
-    const cy = top - Math.round(roofH * 0.55) - ch + 6;
-    p.rect(cx, cy, 9, ch, R.brick[2]);
-    p.rect(cx, cy, 1, ch, R.brick[3]);
-    p.rect(cx + 8, cy, 1, ch, R.brick[1]);
-    for (let by = cy + 2; by < cy + ch; by += 3) {
-      p.hline(cx, by, 9, R.brick[1]);
-      p.px(cx + ((by % 6 === 0) ? 3 : 6), by + 1, R.brick[1]);
-    }
-    p.rect(cx - 1, cy - 2, 11, 2, R.brick[3]);
-    p.rect(cx - 1, cy - 3, 11, 1, R.snow[4]);
-    p.rect(cx + 1, cy - 1, 7, 1, R.void[0]);
-    smokes.push([cx + 4, cy - 4]);
+  /* ---------------- chimneys ---------------- */
+  for (const cx of (opts.chimneys || [Math.round(w * 0.72)])) {
+    const ch = 14 + ((hash2(cx, seed, 23) * 6) | 0);
+    const t = (cx / w);
+    const roofY = 3 + Math.round(roofH * Math.pow(Math.abs(t - 0.5) * 2, 1 / 0.86));
+    const cy = Math.max(0, roofY - ch);
+    p.rect(OX + cx, cy, 10, ch + 4, R.brick[2]);
+    p.rect(OX + cx, cy, 2, ch + 4, R.brick[3]);
+    p.rect(OX + cx + 8, cy, 2, ch + 4, R.brick[1]);
+    for (let by = cy + 3; by < cy + ch; by += 4) p.hline(OX + cx, by, 10, R.brick[1]);
+    p.rect(OX + cx - 1, cy - 2, 12, 2, R.brick[3]);
+    p.rect(OX + cx - 1, cy - 3, 12, 1, SNOW[4]);
+    p.rect(OX + cx + 2, cy - 1, 6, 1, R.void[0]);
+    smokes.push([OX + cx + 5, cy - 4]);
   }
 
-  outline(p.canvas, '#07060e');
-  return { canvas: p.canvas, lights, smokes, groundY: top + bodyH };
+  outline(p.canvas, '#050212');
+  return { canvas: p.canvas, lights, smokes, groundY: baseY + 1 };
 }
 
 /** Gothic arched window with warm interior glow. */
@@ -446,64 +463,170 @@ export function pineTree(size = 1, snowy = true, seed = 1, hue = 'pine') {
 }
 
 export function bareTree(seed = 1) {
-  const w = 40, h = 58;
+  const w = 52, h = 92;
   const p = new P(w, h);
   const cx = w >> 1;
-  p.rect(cx - 3, h - 30, 7, 30, R.bark[1]);
-  p.rect(cx - 3, h - 30, 2, 30, R.bark[2]);
-  p.rect(cx + 3, h - 30, 1, 30, R.bark[0]);
-  p.rect(cx - 6, h - 3, 13, 3, R.bark[1]);
-  // gnarled branches
-  function branch(x, y, ang, len, thick) {
-    if (len < 3) return;
-    let bx = x, by = y;
-    for (let i = 0; i < len; i++) {
-      bx += Math.cos(ang); by += Math.sin(ang);
-      for (let t = 0; t < thick; t++) p.px(bx + t, by, R.bark[2]);
-      p.px(bx, by, R.bark[3]);
-      ang += (hash2(i, seed + len, 9) - 0.5) * 0.35;
+  const trunkH = Math.round(h * 0.55);
+
+  // trunk: warm bark, lit from the upper left, with a root flare
+  for (let y = h - trunkH; y < h; y++) {
+    const t = (y - (h - trunkH)) / trunkH;
+    const half = Math.round(2 + t * 3.2);
+    for (let x = -half; x <= half; x++) {
+      const a = (x + half) / (half * 2 || 1);
+      const shade = a < 0.28 ? 3 : a < 0.62 ? 2 : 1;
+      p.px(cx + x, y, R.bark[shade]);
     }
-    if (len > 6) {
-      branch(bx, by, ang - 0.6, Math.round(len * 0.6), Math.max(1, thick - 1));
-      branch(bx, by, ang + 0.6, Math.round(len * 0.6), Math.max(1, thick - 1));
+    if (hash2(y, seed, 31) > 0.72) p.px(cx + ((hash2(y, seed, 32) * 5) | 0) - 2, y, R.bark[0]);
+  }
+  for (let i = 0; i < 7; i++) {
+    p.px(cx - 5 - i, h - 5 + Math.round(i * 0.7), R.bark[1]);
+    p.px(cx + 5 + i, h - 5 + Math.round(i * 0.7), R.bark[1]);
+    p.px(cx - 5 - i, h - 4 + Math.round(i * 0.7), R.bark[0]);
+    p.px(cx + 5 + i, h - 4 + Math.round(i * 0.7), R.bark[0]);
+  }
+  p.ellipse(cx, h - 1, 11, 2, R.bark[0]);
+
+  // branches, thinning as they fork
+  function branch(x, y, ang, len, thick, depth) {
+    let bx = x, by = y, a = ang;
+    for (let i = 0; i < len; i++) {
+      bx += Math.cos(a); by += Math.sin(a);
+      for (let t = 0; t < thick; t++) {
+        p.px(bx + t, by, R.bark[2]);
+        if (thick > 1) p.px(bx, by, R.bark[3]);
+      }
+      // snow rides the upper surface of every limb
+      if (hash2(i, depth * 13 + seed, 33) > 0.42) p.px(bx, by - 1, R.snow[4]);
+      a += (hash2(i, depth * 7 + seed + len, 34) - 0.5) * 0.32;
+    }
+    if (depth < 3 && len > 5) {
+      branch(bx, by, a - 0.55 - hash2(depth, seed, 35) * 0.3, Math.round(len * 0.62),
+             Math.max(1, thick - 1), depth + 1);
+      branch(bx, by, a + 0.55 + hash2(depth, seed, 36) * 0.3, Math.round(len * 0.62),
+             Math.max(1, thick - 1), depth + 1);
     }
   }
-  branch(cx, h - 30, -Math.PI / 2, 14, 3);
-  branch(cx - 1, h - 24, -Math.PI / 2 - 0.9, 10, 2);
-  branch(cx + 2, h - 26, -Math.PI / 2 + 0.9, 10, 2);
-  // snow on the upper sides of branches
-  for (let y = 0; y < h; y++)
-    for (let x = 0; x < w; x++) {
-      const im = p.x.getImageData(x, y, 1, 1).data;
-      if (im[3] > 0 && hash2(x, y, 12) > 0.72) p.px(x, y - 1, R.snow[3]);
-    }
-  outline(p.canvas, '#06050c');
+  const topY = h - trunkH;
+  branch(cx, topY, -Math.PI / 2, 16, 3, 0);
+  branch(cx - 1, topY + 6, -Math.PI / 2 - 0.85, 13, 2, 1);
+  branch(cx + 2, topY + 4, -Math.PI / 2 + 0.85, 13, 2, 1);
+  branch(cx - 2, topY + 16, -Math.PI / 2 - 1.15, 9, 2, 2);
+  branch(cx + 3, topY + 19, -Math.PI / 2 + 1.15, 9, 2, 2);
+
+  // snow packed in the crooks
+  for (let k = 0; k < 5; k++) {
+    const bx = 8 + ((hash2(k, seed, 37) * (w - 16)) | 0);
+    const by = 10 + ((hash2(k, seed, 38) * (trunkH - 6)) | 0);
+    p.px(bx, by, R.snow[3]); p.px(bx + 1, by, R.snow[4]);
+  }
+  outline(p.canvas, '#050212');
   return p.canvas;
 }
 
+/**
+ * Soft blue shadow cast onto the snow by a building. Returned as its own
+ * translucent canvas so it can be laid down as a floor decal under everything.
+ */
+export function castShadow(w, h) {
+  const c = makeCanvas(w, h);
+  const x = c.getContext('2d');
+  x.imageSmoothingEnabled = false;
+  for (let j = 0; j < h; j++) {
+    for (let i = 0; i < w; i++) {
+      const dx = (i - w / 2) / (w / 2), dy = (j - h / 2) / (h / 2);
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d > 1) continue;
+      const a = 0.5 * (1 - Math.pow(d, 2.0));
+      x.fillStyle = `rgba(46,58,178,${a.toFixed(3)})`;
+      x.fillRect(i, j, 1, 1);
+    }
+  }
+  return c;
+}
+
 export function lampPost() {
-  const p = new P(14, 46);
-  p.rect(6, 8, 2, 34, R.ink[2]);
-  p.rect(6, 8, 1, 34, R.ink[3]);
-  p.rect(3, 42, 8, 3, R.ink[2]);
-  p.rect(3, 41, 8, 1, R.ink[3]);
-  p.rect(2, 44, 10, 2, R.ink[1]);
-  // decorative curls
-  p.px(4, 14, R.ink[2]); p.px(3, 15, R.ink[2]); p.px(9, 14, R.ink[2]); p.px(10, 15, R.ink[2]);
+  const p = new P(16, 54);
+  const G = R.lampPost;
+  // green enamel column on a stepped base
+  p.rect(7, 12, 3, 36, G[2]);
+  p.rect(7, 12, 1, 36, G[3]);
+  p.rect(9, 12, 1, 36, G[1]);
+  p.rect(4, 46, 9, 4, G[1]);
+  p.rect(4, 45, 9, 1, G[2]);
+  p.rect(3, 50, 11, 3, G[0]);
+  p.rect(3, 49, 11, 1, R.snow[3]);
+  // decorative collar + scroll brackets
+  p.rect(5, 18, 7, 2, G[3]);
+  p.px(5, 22, G[2]); p.px(4, 23, G[2]); p.px(11, 22, G[2]); p.px(12, 23, G[2]);
   // lantern housing
-  p.rect(2, 2, 10, 2, R.ink[3]);
-  p.rect(3, 0, 8, 2, R.ink[2]);
-  p.px(7, -1, R.ink[3]);
-  p.rect(3, 4, 8, 8, R.ink[2]);
-  p.rect(4, 4, 6, 8, R.lamp[3]);
-  p.rect(5, 5, 4, 5, R.lamp[4]);
-  p.rect(6, 6, 2, 2, '#fffbe6');
-  p.vline(6, 4, 8, R.ink[2]); p.vline(9, 4, 8, R.ink[2]);
-  p.rect(2, 12, 10, 2, R.ink[3]);
-  p.rect(3, 11, 8, 1, R.snow[4]);
-  p.rect(2, 1, 10, 1, R.snow[4]);
-  outline(p.canvas, '#06050c');
-  return { canvas: p.canvas, light: [7, 8, 62] };
+  p.rect(3, 6, 11, 2, G[1]);
+  p.rect(4, 4, 9, 2, G[2]);
+  p.rect(6, 1, 5, 3, G[1]);
+  p.px(8, 0, G[3]);
+  p.rect(4, 8, 9, 9, G[1]);
+  p.rect(5, 8, 7, 9, R.lamp[2]);
+  p.rect(5, 9, 7, 6, R.lamp[3]);
+  p.rect(6, 10, 5, 4, R.lamp[4]);
+  p.rect(7, 11, 3, 2, '#fffdf0');
+  p.vline(7, 8, 9, G[1]); p.vline(10, 8, 9, G[1]);
+  p.rect(3, 17, 11, 2, G[2]);
+  p.rect(3, 16, 11, 1, R.snow[4]);
+  p.rect(4, 3, 9, 1, R.snow[4]);
+  // red ribbon tied under the lantern
+  p.rect(5, 20, 7, 2, R.ember[1]);
+  p.px(4, 22, R.ember[1]); p.px(12, 22, R.ember[1]);
+  p.px(4, 23, R.ember[0]); p.px(12, 23, R.ember[0]);
+  p.px(6, 20, R.ember[3]);
+  outline(p.canvas, '#050212');
+  return { canvas: p.canvas, light: [8, 12, 68] };
+}
+
+/** Low picket fence panel, snow-capped. */
+export function fencePanel(seed = 1) {
+  const p = new P(32, 22);
+  for (let i = 0; i < 5; i++) {
+    const x = 1 + i * 6;
+    p.rect(x, 4, 4, 17, R.wood[2]);
+    p.rect(x, 4, 1, 17, R.wood[3]);
+    p.rect(x + 3, 4, 1, 17, R.wood[1]);
+    // pointed cap
+    p.px(x + 1, 3, R.wood[2]); p.px(x + 2, 3, R.wood[2]);
+    p.rect(x, 2, 4, 1, R.snow[4]);
+    p.rect(x, 3, 4, 1, R.snow[3]);
+    if (hash2(i, seed, 3) > 0.6) p.rect(x, 9, 4, 1, R.wood[1]);
+  }
+  p.rect(0, 8, 32, 2, R.wood[2]);
+  p.rect(0, 8, 32, 1, R.wood[3]);
+  p.rect(0, 15, 32, 2, R.wood[2]);
+  p.rect(0, 15, 32, 1, R.wood[3]);
+  p.rect(0, 7, 32, 1, R.snow[3]);
+  outline(p.canvas, '#050212');
+  return p.canvas;
+}
+
+/** Planter box with a small snow-dusted shrub. */
+export function planter(seed = 1) {
+  const p = new P(26, 22);
+  const B = R.pineB;
+  p.ellipse(9, 8, 7, 5, B[1]);
+  p.ellipse(16, 9, 6, 4, B[2]);
+  p.ellipse(8, 6, 5, 3, B[3]);
+  for (let k = 0; k < 10; k++)
+    p.px(3 + ((hash2(k, seed, 5) * 20) | 0), 3 + ((hash2(k, seed, 6) * 9) | 0), B[4]);
+  p.ellipse(8, 5, 4, 2, R.snow[4]);
+  p.ellipse(17, 7, 3, 1, R.snow[3]);
+  // a few red berries
+  for (let k = 0; k < 3; k++)
+    p.px(5 + ((hash2(k, seed, 7) * 16) | 0), 5 + ((hash2(k, seed, 8) * 7) | 0), R.ember[2]);
+  p.rect(1, 12, 24, 9, R.wood[2]);
+  p.rect(1, 12, 24, 1, R.wood[3]);
+  p.rect(1, 20, 24, 1, R.wood[0]);
+  for (let x = 4; x < 24; x += 6) p.vline(x, 12, 9, R.wood[1]);
+  p.rect(0, 11, 26, 2, R.wood[3]);
+  p.rect(0, 10, 26, 1, R.snow[4]);
+  outline(p.canvas, '#050212');
+  return p.canvas;
 }
 
 export function fountain() {
@@ -711,8 +834,8 @@ export function rock(size = 1, seed = 1) {
 /** Display counter. style 0..3 changes the wood + trim. */
 export function counter(style = 0) {
   const p = new P(32, 26);
-  const WOODS = ['oak', 'wood', 'plum', 'teal'];
-  const TRIMS = ['gold', 'gold', 'moon', 'gold'];
+  const WOODS = ['oak', 'wood', 'floor', 'caramel'];
+  const TRIMS = ['gold', 'gold', 'gold', 'ruby'];
   const W = R[WOODS[style % 4]], T = R[TRIMS[style % 4]];
   // glass case top
   p.rect(0, 6, 32, 4, mix(R.moon[2], W[1], 0.55));
@@ -867,7 +990,7 @@ export function chair(dir = 0) {
  */
 export function rugLarge(w, h) {
   const p = new P(w, h);
-  const F = R.rose, G = R.gold, D = R.plum;
+  const F = R.rose, G = R.gold, D = R.ruby;
   p.rect(0, 0, w, h, F[1]);
   // pile texture
   for (let y = 0; y < h; y++)

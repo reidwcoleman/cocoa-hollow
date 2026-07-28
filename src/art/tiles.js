@@ -216,19 +216,19 @@ function woodFloorTile(p, seed) {
     const i = (py / plankH) | 0;
     const v = hash2(i, seed, 101);
     const b = 2 + Math.round(v * 0.9 - 0.45);
-    p.rect(0, py, TS, plankH, R.oak[b]);
-    p.hline(0, py, TS, R.oak[Math.min(4, b + 1)]);
-    p.hline(0, py + plankH - 1, TS, R.oak[Math.max(0, b - 1)]);
+    p.rect(0, py, TS, plankH, R.floor[b]);
+    p.hline(0, py, TS, R.floor[Math.min(4, b + 1)]);
+    p.hline(0, py + plankH - 1, TS, R.floor[Math.max(0, b - 1)]);
     // grain streaks
     for (let g = 0; g < 4; g++) {
       const gx = (hash2(g, i + seed * 4, 111) * TS) | 0;
       const gl = 2 + ((hash2(g, i + seed * 4, 112) * 4) | 0);
       p.hline(gx, py + 1 + ((hash2(g, i, 113) * (plankH - 2)) | 0),
-              Math.min(gl, TS - gx), R.oak[Math.max(0, b - 1)]);
+              Math.min(gl, TS - gx), R.floor[Math.max(0, b - 1)]);
     }
     // plank seam
     const seam = ((hash2(i, seed, 121) * TS) | 0);
-    p.vline(seam, py, plankH, R.oak[0]);
+    p.vline(seam, py, plankH, R.floor[0]);
   }
 }
 
@@ -330,6 +330,20 @@ function rugTile(p, seed, edge = 'mid') {
 
 /* ---------------- walls (vertical faces) ---------------- */
 function wallTile(p, seed, kind = 'castle') {
+  if (kind === 'warm') {
+    p.rect(0, 0, TS, TS, R.wood[1]);
+    const rows = [[0, 0, 10, 5], [10, 0, 6, 5], [0, 5, 6, 5], [6, 5, 10, 5], [0, 10, 9, 6], [9, 10, 7, 6]];
+    rows.forEach((r, i) => {
+      const [x, y, w, h] = r;
+      const b = 1 + Math.round(hash2(i, seed, 181) * 1.6);
+      p.rect(x, y, w - 1, h - 1, R.wood[b]);
+      p.hline(x, y, w - 1, R.wood[Math.min(4, b + 1)]);
+      p.hline(x, y + h - 2, w - 1, R.wood[Math.max(0, b - 1)]);
+      if (hash2(i, seed, 182) > 0.7)
+        p.px(x + 2, y + 2, R.wood[Math.max(0, b - 1)]);
+    });
+    return;
+  }
   if (kind === 'castle') {
     p.rect(0, 0, TS, TS, R.brick[1]);
     const rows = [[0, 0, 10, 5], [10, 0, 6, 5], [0, 5, 6, 5], [6, 5, 10, 5], [0, 10, 9, 6], [9, 10, 7, 6]];
@@ -377,6 +391,7 @@ export function buildTiles() {
   TILES.rugLeft = [tile(3, (p, s) => rugTile(p, s, 'left'))];
   TILES.rugRight = [tile(4, (p, s) => rugTile(p, s, 'right'))];
   variants('wallCastle', 4, (p, s) => wallTile(p, s, 'castle'));
+  variants('wallWarm', 4, (p, s) => wallTile(p, s, 'warm'));
   variants('wallHouse', 3, (p, s) => wallTile(p, s, 'house'));
   TILES.water = [0, 1, 2, 3].map(f => tile(1, (p, s) => waterTile(p, s, f)));
   return TILES;

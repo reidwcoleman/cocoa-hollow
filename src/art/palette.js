@@ -19,6 +19,11 @@ export const RAMP = {
   // paving is brighter than the snow it sits in — pale periwinkle flags
   pave:    ['#7c86d8', '#a3aaf0', '#c4c6fb', '#d8daff', '#eef1ff'],
   brick:   ['#3b1f3f', '#5a2f52', '#7a4468', '#9a5c80', '#b87a9c'],
+  // building facades read dark violet under bright blue roof planes
+  masonry: ['#0d0023', '#1f155d', '#382c70', '#4d4071', '#634d7e'],
+  // snow lying on a roof picks up more lavender than snow on the ground
+  snowRoof:['#7da8ff', '#a1bbff', '#c7b7ff', '#d2c4ff', '#e6ddff'],
+  lampPost:['#06210f', '#0f3a1c', '#236a2f', '#009769', '#48d49a'],
   slate:   ['#181546', '#241d68', '#33298c', '#4438ad', '#5a4dcc'],
 
   // --- wood & interior ---
