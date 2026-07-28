@@ -182,7 +182,7 @@ export function buildTown() {
   const doorTX = 41, doorTY = Math.floor((csy + cs.groundY) / TS);
   m.block(doorTX - 1, doorTY - 1, 0); m.block(doorTX, doorTY - 1, 0); m.block(doorTX + 1, doorTY - 1, 0);
   m.warps.push({ x: (doorTX - 1) * TS, y: (doorTY - 1) * TS, w: TS * 3, h: TS,
-                 to: 'shop', tx: 15 * TS, ty: 15 * TS, label: 'Enter the Shop' });
+                 to: 'shop', spawn: true, label: 'Enter the Shop' });
   // shop-front snow shoveled
   for (let y = doorTY - 1; y < doorTY + 3; y++) for (let x = doorTX - 4; x <= doorTX + 4; x++) m.set(x, y, 'cobbleBare');
 
@@ -459,11 +459,12 @@ export function buildShop() {
                  to: 'town', tx: 41 * TS, ty: 0, label: 'Step Outside', anchorTown: true });
   for (let x = doorX; x < doorX + 2; x++) m.block(x, RY1, 0);
   m.warps.push({ x: RX0 * TS, y: FY0 * TS, w: TS * 2, h: TS * 2,
-                 to: 'kitchen', tx: 12 * TS, ty: 9 * TS, label: 'The Kitchen' });
+                 to: 'kitchen', spawn: true, label: 'The Kitchen' });
   m.interact.push({ x: 17 * TS, y: (RY1 - 1) * TS, w: TS * 2, h: TS * 2,
                     type: 'openSign', label: 'Open / Close Shop' });
 
   m.door = { x: (doorX + 1) * TS, y: RY1 * TS + 8 };
+  m.spawn = { x: (doorX + 1) * TS, y: (RY1 - 1) * TS };
   m.browseY = (FY0 + 4) * TS;
   m.bounds = { x0: 0, y0: 0, x1: W * TS, y1: H * TS };
   m.props.sort((a, b) => a.sy - b.sy);
@@ -547,9 +548,10 @@ export function buildKitchen() {
   }
 
   m.warps.push({ x: 11 * TS, y: RY1 * TS, w: TS * 3, h: TS,
-                 to: 'shop', tx: 3 * TS, ty: 5 * TS, label: 'Back to the Shop' });
+                 to: 'shop', spawn: true, label: 'Back to the Shop' });
   for (let x = 11; x < 14; x++) m.block(x, RY1, 0);
 
+  m.spawn = { x: 12 * TS, y: (RY1 - 1) * TS };
   m.bounds = { x0: 0, y0: 0, x1: W * TS, y1: H * TS };
   m.props.sort((a, b) => a.sy - b.sy);
   return m;

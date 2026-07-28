@@ -233,7 +233,9 @@ export class UI {
   }
   clicked(x, y, w, h) {
     const m = this.game.input.mouse;
-    return m.pressed && m.x >= x && m.y >= y && m.x < x + w && m.y < y + h;
+    // `uiClick` is the latched press; `m.pressed` keeps direct calls working
+    const down = this.game.uiClick || m.pressed;
+    return down && m.x >= x && m.y >= y && m.x < x + w && m.y < y + h;
   }
 
   header(g, x, y, w, title) {
@@ -722,12 +724,13 @@ export class UI {
   panelMenu(g) {
     const G = this.game;
     g.fillStyle = 'rgba(4,4,12,0.72)'; g.fillRect(0, 0, VW, VH);
-    const w = 180, h = 130, x = (VW - w) / 2, y = (VH - h) / 2;
+    const w = 180, h = 148, x = (VW - w) / 2, y = (VH - h) / 2;
     panel(g, x, y, w, h, 'wood');
     this.header(g, x, y, w, 'PAUSED');
     const items = [
       ['Resume', () => this.close()],
       ['Satchel', () => this.open('inventory')],
+      ['Equipment', () => this.open('gear')],
       ['Recipe Book', () => this.open('recipes')],
       ['Journal', () => this.open('journal')],
       ['Sleep until dawn', () => { this.close(); G.lastDayGold = G.dayGold; G.advanceDay(); }],

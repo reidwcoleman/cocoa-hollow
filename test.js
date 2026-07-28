@@ -5,6 +5,7 @@ import { Game } from './src/game.js';
 import { Enemy } from './src/entities.js';
 import { RECIPES, recipeById } from './src/data.js';
 import { TS } from './src/art/tiles.js';
+import { VW as VW_, VH as VH_ } from './src/engine/core.js';
 
 const results = [];
 function check(name, fn) {
@@ -503,6 +504,106 @@ check('town goodwill widens the crowd', () => {
   assert(warm > cold, `appeal did not rise (${cold} -> ${warm})`);
   G.npcs.forEach(n => { n.hearts = 0; n.friendship = 0; });
   return `${cold} -> ${warm} at four hearts each`;
+});
+
+/* ---------------- doors and spawns ---------------- */
+check('every warp lands somewhere you can stand', () => {
+  const bad = [];
+  for (const id in G.maps) {
+    const m = G.maps[id];
+    for (const w of m.warps) {
+      const dest = G.maps[w.to];
+      assert(dest, `${id} warp points at unknown map ${w.to}`);
+      let x, y;
+      if (w.spawn) {
+        assert(dest.spawn, `${id} -> ${w.to} asks for a spawn the map does not define`);
+        x = dest.spawn.x; y = dest.spawn.y;
+      } else {
+        x = w.tx; y = w.ty;
+        if (w.anchorTown) y = G.maps.town.warps[0].y + TS + 6;
+      }
+      const tx = Math.floor(x / TS), ty = Math.floor(y / TS);
+      const inBounds = tx >= 0 && ty >= 0 && tx < dest.w && ty < dest.h;
+      if (!inBounds || dest.isSolid(tx, ty))
+        bad.push(`${id}->${w.to} at (${tx},${ty}) ${inBounds ? 'solid' : 'OUT OF BOUNDS'}`);
+    }
+  }
+  assert(bad.length === 0, bad.join('; '));
+  return 'all destinations walkable';
+});
+
+check('walking through a door leaves you free to move', () => {
+  G.ui.close();
+  G.setMap('town', 41 * TS, 22 * TS);
+  const w = G.maps.town.warps.find(x => x.to === 'shop');
+  G.player.x = w.x + w.w / 2; G.player.y = w.y + w.h / 2;
+  const h = G.nearInteract();
+  assert(h && h.kind === 'warp', 'shop door not detected');
+  tap('e');
+  assert(G.mapId === 'shop', 'did not enter the shop, on ' + G.mapId);
+  const ptx = Math.floor(G.player.x / TS), pty = Math.floor(G.player.y / TS);
+  assert(!G.map.isSolid(ptx, pty), `landed inside geometry at (${ptx},${pty})`);
+  // and can actually walk away from where we landed
+  const x0 = G.player.x, y0 = G.player.y;
+  G.player.knock.x = 0; G.player.knock.y = 0;
+  let moved = false;
+  for (const k of ['w', 'a', 's', 'd']) {
+    G.player.x = x0; G.player.y = y0;
+    step(20, [k]);
+    if (Math.hypot(G.player.x - x0, G.player.y - y0) > 6) { moved = true; break; }
+  }
+  assert(moved, 'wedged in the doorway — no direction moves the player');
+  return `entered at (${ptx},${pty}) and can move`;
+});
+
+check('setMap never strands the player inside geometry', () => {
+  // aim at a deliberately illegal spot: past the bottom edge of the shop
+  G.setMap('shop', 15 * TS, 15 * TS);
+  const tx = Math.floor(G.player.x / TS), ty = Math.floor(G.player.y / TS);
+  assert(tx >= 0 && ty >= 0 && tx < G.map.w && ty < G.map.h,
+    `left the player out of bounds at (${tx},${ty})`);
+  assert(!G.map.isSolid(tx, ty), `left the player in a solid tile at (${tx},${ty})`);
+  return `nudged to (${tx},${ty})`;
+});
+
+/* ---------------- UI interaction ---------------- */
+check('panel buttons respond to a click', () => {
+  G.ui.close();
+  G.setMap('town', 41 * TS, 34 * TS);
+  // a real press: set by the mousedown listener, cleared by endFrame before
+  // render — the panel must still see it
+  G.input.mouse.pressed = true;
+  G.input.mouse.x = 4; G.input.mouse.y = 4;
+  G.update(1 / 60);
+  assert(G.uiClick === true, 'the click was not latched for the render pass');
+  G.uiClick = false;
+  return 'click survives update -> render';
+});
+
+check('the pause menu items actually fire', () => {
+  G.ui.open('menu');
+  // the Satchel row is the second item; menu rows are 18px apart from y+30
+  const w = 180, h = 148, x = (VW_ - w) / 2, y = (VH_ - h) / 2;
+  G.input.mouse.x = x + w / 2;
+  G.input.mouse.y = y + 30 + 1 * 18 + 7;
+  G.uiClick = true;
+  G.ui.render(G.g);
+  G.uiClick = false;
+  assert(G.ui.mode === 'inventory', 'clicking Satchel did nothing, mode=' + G.ui.mode);
+  G.ui.close();
+  return 'menu -> satchel';
+});
+
+check('the close button shuts a panel', () => {
+  G.ui.open('inventory');
+  const w = 300, h = 156, x = (VW_ - w) / 2, y = (VH_ - h) / 2;
+  G.input.mouse.x = x + w - 18 + 5;
+  G.input.mouse.y = y + 6 + 5;
+  G.uiClick = true;
+  G.ui.render(G.g);
+  G.uiClick = false;
+  assert(G.ui.mode === null, 'panel stayed open, mode=' + G.ui.mode);
+  return 'closes';
 });
 
 /* ---------------- render smoke test ---------------- */

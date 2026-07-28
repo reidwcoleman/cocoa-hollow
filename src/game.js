@@ -103,9 +103,33 @@ export class Game {
   /* ================================================================ *
    * WORLD
    * ================================================================ */
+  /** Nearest walkable point to (x,y), searched outward in rings. */
+  freeSpotNear(map, x, y) {
+    const tx = Math.floor(x / TS), ty = Math.floor(y / TS);
+    if (!map.isSolid(tx, ty)) return { x, y };
+    for (let r = 1; r < 24; r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+          const nx = tx + dx, ny = ty + dy;
+          if (map.isSolid(nx, ny)) continue;
+          return { x: nx * TS + TS / 2, y: ny * TS + TS / 2 };
+        }
+      }
+    }
+    return { x, y };
+  }
+
   setMap(id, x, y) {
     this.map = this.maps[id];
     this.mapId = id;
+    if (x == null || y == null) {
+      const sp = this.map.spawn || { x: (this.map.w / 2) * TS, y: (this.map.h / 2) * TS };
+      x = sp.x; y = sp.y;
+    }
+    // a target that has drifted into geometry must not strand the player
+    const safe = this.freeSpotNear(this.map, x, y);
+    x = safe.x; y = safe.y;
     this.player.x = x; this.player.y = y;
     this.cam.follow(x, y, this.map.bounds, true);
     this.smoke.setSources(this.map.smokes || []);
@@ -155,7 +179,7 @@ export class Game {
     this.daySpent = 0;
     this.spawnGroveEnemies();
     this.dayGold = 0;
-    this.setMap('shop', 15 * TS, 15 * TS);
+    this.setMap('shop');
     this.notify(`Day ${this.day}. ${TIPS[(this.day - 1) % TIPS.length]}`);
     this.ui.open('dayEnd');
   }
@@ -181,6 +205,10 @@ export class Game {
     if (inp.wasPressed('m')) this.ui.toggle('journal');
     if (inp.wasPressed('g')) this.ui.toggle('gear');
 
+    // endFrame() clears mouse.pressed before render() runs, and every panel
+    // hit-tests during render — so latch the click across the boundary
+    if (inp.mouse.pressed) this.uiClick = true;
+    if (inp.mouse.rpressed) this.uiRClick = true;
     this.ui.update(dt, inp);
 
     if (!this.uiBlocking()) {
@@ -402,7 +430,7 @@ export class Game {
       this.notify('You black out in the snow… and wake up at home.');
       this.player.hp = Math.round(this.player.maxHp * 0.5);
       this.minutes = Math.max(this.minutes, 24 * 60);
-      this.setMap('shop', 15 * TS, 15 * TS);
+      this.setMap('shop');
     }
   }
 
@@ -532,9 +560,13 @@ export class Game {
     if (!h) return;
     if (h.kind === 'warp') {
       const w = h.data;
-      let tx = w.tx, ty = w.ty;
-      if (w.anchorTown) { ty = this.maps.town.warps[0].y + TS + 6; }
-      this.setMap(w.to, tx, ty);
+      if (w.spawn) {
+        this.setMap(w.to);
+      } else {
+        let tx = w.tx, ty = w.ty;
+        if (w.anchorTown) { ty = this.maps.town.warps[0].y + TS + 6; }
+        this.setMap(w.to, tx, ty);
+      }
       this.sfx('door');
     } else if (h.kind === 'forage') {
       h.data.taken = true;
@@ -795,7 +827,11 @@ export class Game {
     const g = this.g;
     g.imageSmoothingEnabled = false;
 
-    if (this.state === 'title') { this.renderTitle(); this.screen.present(); return; }
+    if (this.state === 'title') {
+      this.renderTitle(); this.screen.present();
+      this.uiClick = false; this.uiRClick = false;
+      return;
+    }
 
     const camx = this.cam.ox, camy = this.cam.oy;
     const map = this.map;
@@ -1047,6 +1083,8 @@ export class Game {
 
     /* ---- HUD + panels ---- */
     if (!this.hideHud) this.ui.render(g);
+    this.uiClick = false;
+    this.uiRClick = false;
 
     this.screen.present();
   }
