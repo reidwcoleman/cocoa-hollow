@@ -24,6 +24,10 @@ export const RAMP = {
   // snow lying on a roof picks up more lavender than snow on the ground
   snowRoof:['#7da8ff', '#a1bbff', '#c7b7ff', '#d2c4ff', '#e6ddff'],
   lampPost:['#06210f', '#0f3a1c', '#236a2f', '#009769', '#48d49a'],
+  // shop roofs sit lighter and cooler than house roofs
+  roofSlate:['#1e41d3', '#4575ff', '#74a9ff', '#a3bdff', '#cfdcff'],
+  // warm olive river-rock for gable ends, against the cold roof
+  river:   ['#2a2419', '#463c2c', '#5d5039', '#7a6a4a', '#9b8a63'],
   slate:   ['#181546', '#241d68', '#33298c', '#4438ad', '#5a4dcc'],
 
   // --- wood & interior ---

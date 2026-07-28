@@ -5,6 +5,7 @@ import { buildChar, buildGhost, CW, CH, DIR } from './art/chars.js';
 import * as EN from './art/enemies.js';
 import { FX } from './systems/particles.js';
 import { RAMP } from './art/palette.js';
+import { Loadout } from './gear.js';
 
 const R = RAMP;
 
@@ -55,12 +56,17 @@ export class Player {
     this.hitList = new Set();
     this.combo = 0; this.comboT = 0;
     this.fastWindow = 0;   // granted by a successful block
+    this.loadout = new Loadout();
+    this.shootCd = 0;
+    this.blockRaisedT = 99;   // seconds since the guard went up
+    this.guardBreak = 0;
   }
 
   get feetY() { return this.y + this.hh; }
 
   update(dt, input, map, game) {
     if (this.swingCd > 0) this.swingCd -= dt;
+    if (this.shootCd > 0) this.shootCd -= dt;
     if (this.iframe > 0) this.iframe -= dt;
     if (this.hurtT > 0) this.hurtT -= dt;
     if (this.comboT > 0) { this.comboT -= dt; if (this.comboT <= 0) this.combo = 0; }
@@ -81,12 +87,21 @@ export class Player {
       if (input.isDown('s', 'ArrowDown')) my += 1;
     }
 
-    this.blocking = !uiOpen && input.isDown('Shift') && this.swingT <= 0;
+    const wantBlock = !uiOpen && input.isDown('Shift') && this.swingT <= 0
+                      && this.loadout.canBlock() && this.guardBreak <= 0;
+    if (wantBlock && !this.blocking) this.blockRaisedT = 0;
+    else if (wantBlock) this.blockRaisedT += dt;
+    else this.blockRaisedT = 99;
+    this.blocking = wantBlock;
+    // holding the guard up costs stamina, so turtling is not free
+    if (this.blocking && this.blockRaisedT > 0.35) this.en = Math.max(0, this.en - 5 * dt);
+    if (this.guardBreak > 0) this.guardBreak -= dt;
 
     if (mx || my) {
       const l = Math.hypot(mx, my) || 1;
       mx /= l; my /= l;
-      let sp = this.speed * (this.blocking ? 0.45 : 1) * (this.swingT > 0 ? 0.35 : 1);
+      const guardMult = this.loadout.stat('offhand', 'moveMult', 1);
+      let sp = this.speed * (this.blocking ? guardMult : 1) * (this.swingT > 0 ? 0.35 : 1);
       if (this.en <= 0) sp *= 0.6;
       moveWithCollision(this, map, mx * sp * dt, my * sp * dt);
       this.moving = true;
@@ -114,6 +129,8 @@ export class Player {
     if (!uiOpen && input.mouse.pressed || (!uiOpen && input.wasPressed(' '))) {
       this.attack(game);
     }
+    // right mouse or F looses an arrow, if a bow is equipped
+    if (!uiOpen && (input.mouse.rpressed || input.wasPressed('f'))) this.shoot(game);
 
     // energy regen when not swinging
     if (!this.moving && this.swingT <= 0) this.en = Math.min(this.maxEn, this.en + 3 * dt);
@@ -122,8 +139,10 @@ export class Player {
   attack(game) {
     if (this.swingCd > 0 || this.swingT > 0) return;
     const fast = this.fastWindow > 0;
-    this.swingT = fast ? 0.22 : 0.32;
-    this.swingCd = fast ? 0.24 : 0.40;
+    const sw = this.loadout.stat('weapon', 'swing', 0.32);
+    const cd = this.loadout.stat('weapon', 'cd', 0.40);
+    this.swingT = fast ? sw * 0.7 : sw;
+    this.swingCd = fast ? cd * 0.62 : cd;
     this.swingPhase = 0;
     this.hitList.clear();
     this.en = Math.max(0, this.en - 2);
@@ -131,29 +150,65 @@ export class Player {
     game.spawnSlash(this);
   }
 
+  /** Damage of the current swing, before enemy-state bonuses. */
+  swingDamage(targetStunned) {
+    const base = this.loadout.stat('weapon', 'dmg', 8);
+    const openHand = this.loadout.stat('offhand', 'dmgMult', 1);
+    const bonus = this.fastWindow > 0 ? 1.35 : 1;
+    const punish = targetStunned ? 1.75 : 1;
+    return Math.max(1, Math.round(base * openHand * bonus * punish));
+  }
+
+  shoot(game) {
+    const bow = this.loadout.def('ranged');
+    if (!bow || this.shootCd > 0 || this.swingT > 0) return;
+    const cost = bow.energy || 4;
+    if (this.en < cost) { game.notify('Too tired to draw.'); return; }
+    this.en -= cost;
+    this.shootCd = this.loadout.stat('ranged', 'cd', 0.55);
+    const a = { 0: Math.PI / 2, 1: Math.PI, 2: 0, 3: -Math.PI / 2 }[this.dir];
+    game.spawnArrow(this, a, bow);
+    game.sfx('shoot');
+  }
+
   /** Rect covered by the current sword swing. */
   swingRect() {
-    const reach = 20, wide = 24;
+    const reach = this.loadout.stat('weapon', 'reach', 20);
+    const wide = this.loadout.stat('weapon', 'wide', 24);
     if (this.dir === DIR.E) return { x: this.x + 2, y: this.y - wide / 2, w: reach, h: wide };
     if (this.dir === DIR.W) return { x: this.x - 2 - reach, y: this.y - wide / 2, w: reach, h: wide };
     if (this.dir === DIR.S) return { x: this.x - wide / 2, y: this.y + 2, w: wide, h: reach };
     return { x: this.x - wide / 2, y: this.y - 2 - reach, w: wide, h: reach };
   }
 
-  hurt(dmg, fromX, fromY, game) {
+  hurt(dmg, fromX, fromY, game, unblockable = false) {
     if (this.iframe > 0) return false;
     // shield check: are we facing the attacker?
-    if (this.blocking) {
+    if (this.blocking && this.loadout.canBlock()) {
+      const arc = this.loadout.stat('offhand', 'guardArc', 0.5);
       const ax = fromX - this.x, ay = fromY - this.y;
-      const facing = (this.dir === DIR.E && ax > Math.abs(ay) * 0.5)
-                  || (this.dir === DIR.W && -ax > Math.abs(ay) * 0.5)
-                  || (this.dir === DIR.S && ay > Math.abs(ax) * 0.5)
-                  || (this.dir === DIR.N && -ay > Math.abs(ax) * 0.5);
-      if (facing) {
-        this.iframe = 0.25;
-        this.fastWindow = 2.2;
-        game.onBlock(this, fromX, fromY);
-        return 'blocked';
+      const facing = (this.dir === DIR.E && ax > Math.abs(ay) * (1 - arc))
+                  || (this.dir === DIR.W && -ax > Math.abs(ay) * (1 - arc))
+                  || (this.dir === DIR.S && ay > Math.abs(ax) * (1 - arc))
+                  || (this.dir === DIR.N && -ay > Math.abs(ax) * (1 - arc));
+      if (facing && !unblockable) {
+        // raising the guard *into* the blow is a parry: full negation, a stun,
+        // and the fast-attack window. Standing behind a held guard only soaks.
+        if (this.blockRaisedT < 0.35) {
+          this.iframe = this.loadout.stat('offhand', 'block', 0.25);
+          this.fastWindow = this.loadout.stat('offhand', 'fastWindow', 2.0);
+          game.onBlock(this, fromX, fromY, true);
+          return 'parried';
+        }
+        const chip = Math.max(1, Math.round(dmg * 0.3));
+        this.hp = Math.max(0, this.hp - chip);
+        this.iframe = 0.4;
+        this.en = Math.max(0, this.en - 8);
+        if (this.en <= 0) { this.guardBreak = 1.2; game.onGuardBreak(this); }
+        const ga = Math.atan2(this.y - fromY, this.x - fromX);
+        this.knock.x = Math.cos(ga) * 70; this.knock.y = Math.sin(ga) * 70;
+        game.onBlock(this, fromX, fromY, false);
+        return 'guarded';
       }
     }
     this.hp = Math.max(0, this.hp - dmg);
@@ -176,13 +231,17 @@ export class Player {
  * ENEMIES
  * ================================================================== */
 const ENEMY_DEF = {
-  slime:   { hp: 18, dmg: 5,  speed: 26, sight: 130, atkRange: 14, cd: 1.1, xp: 1, w: 20, h: 18, oy: 12, gold: [3, 9],
+  // `tell` is the wind-up you can read and answer. Without it a shield is just
+  // a toggle; with it, blocking becomes a timing decision.
+  slime:   { hp: 18, dmg: 5,  speed: 26, sight: 130, atkRange: 14, cd: 1.1, tell: 0.42, xp: 1, w: 20, h: 18, oy: 12, gold: [3, 9],
              drops: [['cocoaPod', 0.5], ['sugar', 0.35]] },
-  crow:    { hp: 14, dmg: 6,  speed: 52, sight: 170, atkRange: 16, cd: 1.4, xp: 1, w: 20, h: 18, oy: 12, gold: [5, 12],
+  crow:    { hp: 14, dmg: 6,  speed: 52, sight: 170, atkRange: 16, cd: 1.4, tell: 0.5, xp: 1, w: 20, h: 18, oy: 12, gold: [5, 12],
              drops: [['moonberry', 0.3], ['cocoaPod', 0.3]] },
-  bat:     { hp: 12, dmg: 4,  speed: 62, sight: 150, atkRange: 14, cd: 0.9, xp: 1, w: 22, h: 14, oy: 10, gold: [4, 10],
+  bat:     { hp: 12, dmg: 4,  speed: 62, sight: 150, atkRange: 14, cd: 0.9, tell: 0.3, xp: 1, w: 22, h: 14, oy: 10, gold: [4, 10],
              drops: [['gloomcap', 0.35], ['spiritSalt', 0.12]] },
-  potcrab: { hp: 34, dmg: 9,  speed: 22, sight: 120, atkRange: 20, cd: 1.6, xp: 2, w: 24, h: 20, oy: 14, gold: [10, 22],
+  // the crab's slam is unblockable — you have to step out of it
+  potcrab: { hp: 34, dmg: 9,  speed: 22, sight: 120, atkRange: 20, cd: 1.6, tell: 0.62, unblockable: true,
+             xp: 2, w: 24, h: 20, oy: 14, gold: [10, 22],
              drops: [['emberspice', 0.4], ['sugar', 0.4]] },
 };
 
@@ -203,6 +262,8 @@ export class Enemy {
     this.wanderA = Math.random() * Math.PI * 2;
     this.wanderT = 0;
     this.flash = 0;
+    this.windup = 0;
+    this.telegraphed = false;
     this.bobPh = Math.random() * 6;
   }
 
@@ -243,13 +304,19 @@ export class Enemy {
     if (dist < d.sight) {
       this.state = 'chase';
       if (this.cd > 0) this.cd -= dt;
+      if (this.windup > 0) {
+        // committed: rooted while the wind-up plays out
+        this.windup -= dt;
+        if (this.windup <= 0) { game.enemyAttack(this, player); this.cd = d.cd; }
+        return;
+      }
       if (dist > d.atkRange) {
         const sp = d.speed;
         moveWithCollision(this, map, (dx / dist) * sp * dt, (dy / dist) * sp * dt);
       } else if (this.cd <= 0) {
-        this.cd = d.cd;
-        this.attackT = 0.25;
-        game.enemyAttack(this, player);
+        this.windup = d.tell || 0.4;
+        this.telegraphed = true;
+        game.onEnemyTelegraph(this);
       }
     } else {
       this.state = 'idle';
@@ -292,6 +359,7 @@ export function buildEnemyArt() {
     boss: [0, 1, 2, 3].map(f => EN.beeBossFrame(f)),
     stinger: EN.stingerProj(),
     orb: EN.orbProj('wisp'),
+    arrow: EN.arrowProj(),
   };
   return Enemy.cache;
 }
@@ -393,6 +461,8 @@ export class NPC {
     this.tx = this.x; this.ty = this.y;
     this.lineIdx = 0;
     this.hearts = 0;
+    this.friendship = 0;
+    this.giftedDay = -1;
   }
   update(dt, map, player) {
     this.wanderT -= dt;
@@ -546,7 +616,10 @@ export class Customer {
     const stocked = game.shopCounters().filter(c => c.item && c.qty > 0 && c.price <= this.wallet);
     if (!stocked.length) { this.target = null; return; }
     // prefer the best value-for-star option
-    stocked.sort((a, b) => (b.item.star || 0) - (a.item.star || 0) + (Math.random() - 0.5));
+    const score = (c) => (c.item.star || 0) * 2
+      + ((this.taste && this.taste.includes(c.item.id)) ? 6 : 0)
+      + Math.random();
+    stocked.sort((a, b) => score(b) - score(a));
     this.target = stocked[Math.min(stocked.length - 1, (Math.random() * 2) | 0)];
   }
   sprite() { return this.art.walk[this.dir][this.moving ? this.frame : 0]; }

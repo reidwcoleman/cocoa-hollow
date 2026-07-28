@@ -3,6 +3,7 @@
 
 import { P, makeCanvas, outline, hash2, fnoise, crop } from './pixel.js';
 import { RAMP, mix, C } from './palette.js';
+import { drawText } from './font.js';
 
 const R = RAMP;
 
@@ -146,6 +147,274 @@ export function townhouse(opts = {}) {
 
   outline(p.canvas, '#050212');
   return { canvas: p.canvas, lights, smokes, groundY: baseY + 1 };
+}
+
+/* ------------------------------------------------------------------ *
+ * Shopfront: front-facing gable, scalloped shingles flanking a river-rock
+ * gable end, a snow-laden fascia carrying the sign, and a band of big lit
+ * windows underneath. Built to the same architectural grammar as the
+ * reference winter town, from original geometry.
+ * ------------------------------------------------------------------ */
+
+/** One course of fish-scale shingles across [x0,x1) at row y. */
+function scallopCourse(p, x0, x1, y, col, dark) {
+  for (let x = x0; x < x1; x++) {
+    const i = x - x0;
+    const m = i % 5;
+    // each shingle is a shallow arc: dip in the middle, lift at the seams
+    const lift = (m === 0 || m === 4) ? 0 : (m === 2 ? 2 : 1);
+    p.px(x, y + lift, col);
+    p.px(x, y + lift + 1, col);
+    if (m === 0) p.px(x, y, dark);
+  }
+}
+
+/** Tapering icicle hanging from (x,y). */
+function icicle(p, x, y, len) {
+  for (let i = 0; i < len; i++) {
+    p.px(x, y + i, i < len - 2 ? R.moon[3] : R.moon[2]);
+    if (i < len * 0.45) p.px(x + 1, y + i, R.moon[2]);
+  }
+  p.px(x, y + len, R.moon[1]);
+}
+
+/**
+ * opts: { w, sign, signCol, roof, stone, trim, seed, lit }
+ */
+function right0(x, cx) { return x > cx; }
+
+export function shopfront(opts = {}) {
+  const w = opts.w || 116;
+  const gh = opts.gableH || Math.round(w * 0.56);      // gable height
+  const fasc = 16;                                     // fascia + snow band
+  const band = 34;                                     // shop window band
+  const base = 8;
+  // the roof does not stop at the gable — it runs back up-screen behind the
+  // apex, split by a ridge. Leaving this out is what makes a building read as
+  // a flat elevation sticker instead of a solid volume.
+  const depthRun = Math.round(w * 0.42);
+  const H = depthRun + gh + fasc + band + base;
+  const eave = 6;
+  const p = new P(w + eave * 2, H + 6);
+  const OX = eave;
+  const cx = OX + (w >> 1);
+  const ROOF = R[opts.roof || 'roofSlate'];
+  const STONE = R[opts.stone || 'river'];
+  const TRIM = R[opts.trim || 'wood'];
+  const SNOW = R.snowRoof;
+  const seed = opts.seed || 5;
+  const lights = [], smokes = [];
+  const apexY = depthRun;
+  const fascY = depthRun + gh;
+  const bandY = fascY + fasc;
+  const groundY = bandY + band + base;
+
+  /* ---------------- roof running back behind the ridge ---------------- */
+  {
+    const xl = cx - (w / 2 + eave), xr = cx + (w / 2 + eave);
+    for (let y = 0; y < depthRun; y++) {
+      const t = y / (depthRun - 1);                    // 0 far end, 1 at apex
+      const course = y % 5;                            // exposure compresses with distance
+      for (let x = xl; x <= xr; x++) {
+        const right = x > cx;
+        // the right-hand plane sits exactly one step lighter — this is what
+        // sells the pitch of the roof
+        let shade = course === 0 ? 3 : course < 3 ? 2 : 1;
+        if (right) shade = Math.min(4, shade + 1);
+        p.px(x, y, ROOF[shade]);
+      }
+      // compressed scallop hints rather than full arcs at this distance
+      if (course === 0)
+        for (let x = xl + (y % 10 < 5 ? 0 : 3); x <= xr; x += 6) p.px(x, y, ROOF[right0(x, cx) ? 2 : 0]);
+      // snow lies heaviest at the far end and along the ridge
+      // patchy snow — the shingles must stay visible or the roof dissolves
+      // into the snowfield behind it
+      const cover = 0.62 - t * 0.34;
+      for (let x = xl; x <= xr; x++) {
+        const q = fnoise(x / 6, y / 6, seed + 11);
+        if (q < cover) p.px(x, y, SNOW[q < cover * 0.5 ? 4 : 3]);
+      }
+      // ridge, running the whole depth
+      p.rect(cx - 1, y, 2, 1, ROOF[4]);
+      p.px(cx + 1, y, ROOF[0]);
+      if (y % 4 !== 3) p.px(cx - 1, y, SNOW[4]);
+      // verge boards down both outer edges keep the plane readable
+      p.rect(xl, y, 2, 1, ROOF[0]);
+      p.rect(xr - 1, y, 2, 1, ROOF[0]);
+      p.px(xl + 2, y, ROOF[4]);
+      // far eave
+      if (y < 3) {
+        p.rect(xl, y, xr - xl, 1, ROOF[y === 0 ? 0 : 1]);
+        if (y > 0) p.rect(xl + 1, y, xr - xl - 2, 1, SNOW[4]);
+      }
+    }
+  }
+
+  /* ---------------- gable: roof slopes flanking a stone end ------------- */
+  const rakeT = Math.round(w * 0.24);                  // roof band thickness
+  for (let yy = 0; yy < gh; yy++) {
+    const y = apexY + yy;
+    const t = yy / (gh - 1);
+    const half = Math.round((w / 2 + eave) * t);
+    if (half < 2) continue;
+    const xL = cx - half, xR = cx + half;
+    // near the apex the slopes are all there is — never let a band overhang
+    const rt = Math.min(rakeT, half);
+
+    // --- stone gable end between the two roof slopes ---
+    const sL = xL + rt, sR = xR - rt;
+    for (let x = sL; x < sR; x++) {
+      const n = fnoise(x / 5, yy / 5, seed);
+      p.px(x, y, STONE[n > 0.62 ? 3 : n < 0.36 ? 1 : 2]);
+    }
+    // rounded river stones picked out of the mass
+    if (yy % 5 === 2) {
+      for (let x = sL + ((yy / 5 | 0) % 2 ? 4 : 0); x < sR - 3; x += 8) {
+        const b = 1 + Math.round(hash2(x, yy + seed, 401) * 2);
+        p.ellipse(x + 3, y + 1, 3, 2, STONE[b]);
+        p.ellipse(x + 2, y, 2, 1, STONE[Math.min(4, b + 1)]);
+        p.px(x + 5, y + 2, STONE[0]);
+      }
+    }
+
+    // --- roof slopes ---
+    for (const [a, b] of [[xL, xL + rt], [xR - rt, xR]]) {
+      const course = (yy % 6);
+      const shade = course === 0 ? 4 : course < 3 ? 3 : 2;
+      p.rect(a, y, b - a, 1, ROOF[shade]);
+      if (course === 0) scallopCourse(p, a, b, y, ROOF[3], ROOF[1]);
+      // the slope facing right catches the light
+      if (a > cx) p.rect(a, y, b - a, 1, ROOF[Math.min(4, shade + 1)]);
+      // snow lies heavy near the ridge and thins toward the eave
+      const cover = 1 - t * 0.55;
+      if (fnoise(yy / 3.5, seed, 7) < cover) {
+        for (let x = a; x < b; x++) {
+          const q = fnoise(x / 4.5, yy / 4.5, seed + 3);
+          if (q < cover * 0.95) p.px(x, y, SNOW[q < cover * 0.55 ? 4 : 3]);
+        }
+      }
+    }
+    // rake boards along both outer edges
+    p.rect(xL, y, 3, 1, ROOF[4]);
+    p.rect(xR - 3, y, 3, 1, ROOF[1]);
+    p.px(xL, y, SNOW[4]);
+  }
+  // apex cap where the gable meets the receding ridge
+  p.rect(cx - 4, apexY - 2, 9, 4, ROOF[4]);
+  p.rect(cx - 5, apexY - 3, 11, 2, SNOW[4]);
+
+  /* ---------------- arched gable window ---------------- */
+  {
+    const ww = Math.round(w * 0.16), wh = Math.round(gh * 0.42);
+    const wx = cx - (ww >> 1), wy = apexY + Math.round(gh * 0.34);
+    p.rect(wx - 3, wy - 2, ww + 6, wh + 5, TRIM[1]);
+    for (let i = 0; i < 6; i++) p.rect(wx - 3 + (6 - i), wy - 8 + i, ww + 6 - (6 - i) * 2, 1, TRIM[1]);
+    p.rect(wx, wy, ww, wh, R.lamp[3]);
+    for (let i = 0; i < 5; i++) p.rect(wx + (5 - i), wy - 5 + i, ww - (5 - i) * 2, 1, R.lamp[3]);
+    p.rect(wx + 1, wy + 1, ww - 2, Math.round(wh * 0.4), R.lamp[4]);
+    // muntins: two columns, three rows
+    p.vline(wx + ((ww / 2) | 0), wy - 5, wh + 5, TRIM[2]);
+    for (let k = 1; k < 3; k++) p.hline(wx, wy + Math.round(wh * k / 3), ww, TRIM[2]);
+    p.frame(wx - 1, wy - 1, ww + 2, wh + 2, TRIM[3]);
+    // pane glints
+    p.px(wx + 2, wy + 3, '#fffdf0'); p.px(wx + 2, wy + 4, '#fffdf0');
+    p.px(wx + ww - 4, wy + Math.round(wh * 0.5), '#fffdf0');
+    lights.push([wx + ww / 2, wy + wh / 2, 54, true]);
+  }
+
+  /* ---------------- fascia, sign, snow drift ---------------- */
+  p.rect(OX - eave, fascY, w + eave * 2, fasc, '#2b182f');
+  p.rect(OX - eave, fascY, w + eave * 2, 2, '#3a2440');
+  p.rect(OX - eave, fascY + fasc - 2, w + eave * 2, 2, '#1d1020');
+  // heavy snow sitting on the fascia with a soft wavy underside
+  for (let x = 0; x < w + eave * 2; x++) {
+    const d = 4 + Math.round(2.6 * Math.sin(x * 0.11 + seed) + 1.6 * Math.sin(x * 0.31));
+    p.rect(OX - eave + x, fascY - 3, 1, d + 3, R.snow[4]);
+    p.px(OX - eave + x, fascY - 3 + d + 2, R.snow[3]);
+  }
+  // icicles off the snow band
+  for (let x = 2; x < w + eave * 2; x += 3)
+    if (hash2(x, seed, 17) > 0.42)
+      icicle(p, OX - eave + x, fascY + 3, 2 + ((hash2(x, seed, 18) * 6) | 0));
+  // sign lettering
+  if (opts.sign) {
+    drawText(p.x, opts.sign, cx, fascY + fasc - 11,
+      { color: opts.signCol || '#a13636', align: 'center', scale: 1, tracking: 2, shadow: '#150a12' });
+  }
+
+  /* ---------------- shop window band ---------------- */
+  p.rect(OX, bandY, w, band, TRIM[2]);
+  p.rect(OX, bandY, w, 2, TRIM[3]);
+  const doorW = 20, dx = cx - (doorW >> 1);
+  for (const [wx0, wx1] of [[OX + 4, dx - 3], [dx + doorW + 3, OX + w - 4]]) {
+    const ww = wx1 - wx0;
+    if (ww < 10) continue;
+    p.rect(wx0, bandY + 4, ww, band - 10, TRIM[1]);
+    p.rect(wx0 + 2, bandY + 6, ww - 4, band - 14, R.lamp[3]);
+    // orange heat at the top of every pane, gold below
+    p.rect(wx0 + 2, bandY + 6, ww - 4, 5, R.lamp[2]);
+    p.rect(wx0 + 3, bandY + 11, ww - 6, band - 20, R.lamp[4]);
+    // mullions
+    const panes = Math.max(2, Math.round(ww / 11));
+    for (let k = 1; k < panes; k++)
+      p.vline(wx0 + Math.round(ww * k / panes), bandY + 4, band - 10, TRIM[1]);
+    p.hline(wx0, bandY + 12, ww, TRIM[1]);
+    // little curtain hooks catching the light
+    for (let k = 0; k < panes; k++)
+      p.px(wx0 + Math.round(ww * (k + 0.4) / panes), bandY + 16, R.lamp[1]);
+    p.frame(wx0, bandY + 4, ww, band - 10, TRIM[0]);
+    p.rect(wx0 - 1, bandY + band - 6, ww + 2, 3, TRIM[2]);
+    lights.push([wx0 + ww / 2, bandY + band / 2, 62, true]);
+  }
+
+  /* ---------------- doorway ---------------- */
+  p.rect(dx - 2, bandY + 2, doorW + 4, band - 2, TRIM[1]);
+  p.rect(dx, bandY + 4, doorW, band - 4, R.lamp[2]);        // warm spill from inside
+  p.rect(dx + 2, bandY + 6, doorW - 4, band - 8, R.lamp[3]);
+  // open leaf hinged on the left
+  p.rect(dx - 1, bandY + 4, 7, band - 6, TRIM[2]);
+  p.rect(dx - 1, bandY + 4, 7, 1, TRIM[3]);
+  for (let k = 1; k < 6; k += 2) p.vline(dx - 1 + k, bandY + 4, band - 6, TRIM[1]);
+  p.px(dx + 4, bandY + Math.round(band * 0.55), R.gold[3]);
+  lights.push([cx, bandY + band * 0.6, 50, true]);
+
+  /* ---------------- stoop + light spill on the snow ---------------- */
+  const gy = groundY;
+  p.ellipse(cx, gy - 2, 15, 5, R.stone[1]);
+  p.ellipse(cx, gy - 3, 15, 5, R.stone[2]);
+  for (let a = 0; a < 360; a += 26) {
+    const rad = a * Math.PI / 180;
+    p.ellipse(cx + Math.cos(rad) * 11, gy - 3 + Math.sin(rad) * 3.4, 3, 2, R.stone[3]);
+  }
+  p.rect(OX, gy - 4, w, 4, R.snow[3]);
+  p.rect(OX, gy - 4, w, 1, R.snow[4]);
+  // warm light thrown onto the snow in front of each window
+  for (let k = 0; k < 10; k++) {
+    const lx = OX + 6 + ((hash2(k, seed, 21) * (w - 12)) | 0);
+    if (Math.abs(lx - cx) < 14) continue;
+    p.hline(lx, gy - 3 + ((hash2(k, seed, 22) * 3) | 0), 3 + ((hash2(k, seed, 23) * 4) | 0), R.lamp[3]);
+  }
+
+  /* ---------------- chimney ---------------- */
+  {
+    const ccx = OX + Math.round(w * (opts.chimneyX != null ? opts.chimneyX : 0.2));
+    const t = Math.abs((ccx - cx)) / (w / 2 + eave);
+    const roofY = apexY + Math.round(gh * t);
+    const ch = 20;
+    const cy = Math.max(0, roofY - ch + 6);
+    p.rect(ccx, cy, 11, ch + 6, R.brick[2]);
+    p.rect(ccx, cy, 2, ch + 6, R.brick[3]);
+    p.rect(ccx + 9, cy, 2, ch + 6, R.brick[1]);
+    for (let by = cy + 3; by < cy + ch + 4; by += 4) p.hline(ccx, by, 11, R.brick[1]);
+    p.rect(ccx - 1, cy - 2, 13, 2, R.brick[3]);
+    p.rect(ccx - 1, cy - 3, 13, 1, SNOW[4]);
+    p.rect(ccx + 2, cy - 1, 3, 1, R.void[0]);
+    p.rect(ccx + 6, cy - 1, 3, 1, R.void[0]);
+    smokes.push([ccx + 5, cy - 4]);
+  }
+
+  outline(p.canvas, '#050212');
+  return { canvas: p.canvas, lights, smokes, groundY };
 }
 
 /** Gothic arched window with warm interior glow. */
@@ -958,6 +1227,49 @@ export function cauldron(frame = 0) {
 
   outline(p.canvas, '#06050c');
   return { canvas: p.canvas, light: [CX, 24, 52] };
+}
+
+/**
+ * Conching machine — the conventional route. A slow motorised drum that grinds
+ * a batch unattended, in contrast to the cauldron's hands-on tempering.
+ */
+export function conche(frame = 0) {
+  const p = new P(34, 34);
+  const M = R.ink, B = R.brick;
+  // brick plinth
+  p.rect(2, 24, 30, 9, B[2]);
+  p.rect(2, 24, 30, 1, B[3]);
+  for (let y = 27; y < 33; y += 3) p.hline(2, y, 30, B[1]);
+  // drum
+  p.ellipse(17, 15, 14, 10, M[1]);
+  p.ellipse(17, 14, 14, 10, M[2]);
+  p.ellipse(13, 10, 8, 5, M[3]);
+  p.ellipse(11, 7, 4, 2, M[4]);
+  // iron bands
+  for (const bx of [8, 17, 26]) {
+    for (let y = 5; y < 24; y++) {
+      const dx = Math.round(Math.sin((y - 5) / 19 * Math.PI) * 1.5);
+      p.px(bx + dx, y, M[3]);
+    }
+  }
+  // rotating hatch shows the chocolate turning over
+  const a = frame * Math.PI / 2;
+  p.ellipse(17, 13, 6, 5, R.cocoa[1]);
+  p.ellipse(17, 13, 5, 4, R.cocoa[2]);
+  p.ellipse(17 + Math.cos(a) * 2, 13 + Math.sin(a) * 1.6, 3, 2, R.milk[3]);
+  p.px(17 + Math.cos(a) * 2, 12 + Math.sin(a) * 1.6, R.milk[4]);
+  p.ring(17, 13, 6, 5, R.gold[2]);
+  // crank + flywheel
+  p.rect(30, 12, 3, 3, M[3]);
+  p.circle(31, 18, 4, M[2]);
+  p.circle(31, 18, 3, M[3]);
+  p.px(31 + Math.cos(-a) * 2, 18 + Math.sin(-a) * 2, R.gold[3]);
+  // funnel
+  p.rect(12, 0, 10, 3, M[3]);
+  p.rect(13, 3, 8, 3, M[2]);
+  p.rect(15, 6, 4, 2, M[1]);
+  outline(p.canvas, '#050212');
+  return { canvas: p.canvas, light: [17, 14, 30] };
 }
 
 /** Small round cafe table with chocolates on it. */

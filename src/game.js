@@ -10,8 +10,9 @@ import { drawText, textWidth, wrapText, panel, slot, bar } from './art/font.js';
 import { RAMP, C, mix } from './art/palette.js';
 import * as PR from './art/props.js';
 import { DIR } from './art/chars.js';
-import { INGREDIENTS, INGREDIENT_ORDER, RECIPES, recipeById, NPCS, GHOST_NAMES, TIPS } from './data.js';
+import { INGREDIENTS, INGREDIENT_ORDER, RECIPES, recipeById, NPCS, GHOST_NAMES, TIPS, VENDORS } from './data.js';
 import { UI } from './ui.js';
+import { rollDrop, bossDrops, itemDef, RARITY } from './gear.js';
 
 const R = RAMP;
 
@@ -149,6 +150,9 @@ export class Game {
     this.customers.length = 0;
     // forage respawn
     for (const f of this.maps.grove.forage) if (Math.random() < 0.75) f.taken = false;
+    this.lastDayGold = this.dayGold;
+    this.lastDaySpent = this.daySpent || 0;
+    this.daySpent = 0;
     this.spawnGroveEnemies();
     this.dayGold = 0;
     this.setMap('shop', 15 * TS, 15 * TS);
@@ -175,6 +179,7 @@ export class Game {
     if (inp.wasPressed('i', 'Tab')) this.ui.toggle('inventory');
     if (inp.wasPressed('c')) this.ui.toggle('recipes');
     if (inp.wasPressed('m')) this.ui.toggle('journal');
+    if (inp.wasPressed('g')) this.ui.toggle('gear');
 
     this.ui.update(dt, inp);
 
@@ -214,7 +219,39 @@ export class Game {
         FX.hit(this.particles, p.x, p.y);
         this.projectiles.splice(i, 1); continue;
       }
+      if (p.friendly) {
+        let consumed = false;
+        for (const e of this.enemies) {
+          if (e.dead || p.hits.has(e)) continue;
+          if (Math.hypot(p.x - e.x, p.y - e.y) < 11) {
+            p.hits.add(e);
+            e.hurt(p.dmg + ((Math.random() * 3) | 0), p.x, p.y, this, e.stun > 0);
+            this.sfx('hit');
+            if (p.pierce > 0) p.pierce--; else consumed = true;
+            break;
+          }
+        }
+        if (!consumed && this.boss.active && !this.boss.dead && !p.hits.has(this.boss)
+            && Math.hypot(p.x - this.boss.x, p.y - (this.boss.y - 16)) < 26) {
+          p.hits.add(this.boss);
+          this.boss.hurt(p.dmg + 2, p.x, p.y, this, this.boss.stun > 0);
+          if (p.pierce > 0) p.pierce--; else consumed = true;
+        }
+        if (consumed) { FX.hit(this.particles, p.x, p.y); this.projectiles.splice(i, 1); }
+        continue;
+      }
       if (Math.hypot(p.x - this.player.x, p.y - this.player.y) < 10) {
+        // the Spirit Ward build turns incoming shots around instead of eating them
+        if (this.player.blocking && this.player.loadout.def('offhand')
+            && this.player.loadout.def('offhand').reflect) {
+          p.vx = -p.vx; p.vy = -p.vy;
+          p.friendly = true; p.hits = new Set();
+          p.dmg = Math.round(p.dmg * 1.5);
+          p.life = 1.6;
+          this.floatText.add(this.player.x, this.player.y - 26, 'REFLECT', '#a394ee');
+          this.sfx('block');
+          continue;
+        }
         const r = this.player.hurt(p.dmg, p.x, p.y, this);
         if (r) { this.projectiles.splice(i, 1); FX.hit(this.particles, p.x, p.y); }
       }
@@ -236,6 +273,7 @@ export class Game {
       if (pk.life <= 0) this.pickups.splice(i, 1);
     }
 
+    this.updateConches(dt);
     this.particles.update(dt);
     this.floatText.update(dt);
     this.smoke.update(dt, this.t);
@@ -270,7 +308,7 @@ export class Game {
         if (e.dead || pl.hitList.has(e)) continue;
         if (this.overlap(rect, { x: e.x - 8, y: e.y - 12, w: 16, h: 18 })) {
           pl.hitList.add(e);
-          const dmg = (e.stun > 0 ? 14 : 8) + (stunBonus ? 4 : 0) + ((Math.random() * 3) | 0);
+          const dmg = pl.swingDamage(e.stun > 0) + ((Math.random() * 3) | 0);
           e.hurt(dmg, pl.x, pl.y, this, e.stun > 0);
           this.cam.kick(2.2);
           this.sfx('hit');
@@ -279,7 +317,7 @@ export class Game {
       if (this.boss.active && !this.boss.dead && !pl.hitList.has(this.boss)) {
         if (this.overlap(rect, { x: this.boss.x - 18, y: this.boss.y - 30, w: 36, h: 46 })) {
           pl.hitList.add(this.boss);
-          const dmg = (this.boss.stun > 0 ? 20 : 10) + ((Math.random() * 4) | 0);
+          const dmg = Math.round(pl.swingDamage(this.boss.stun > 0) * 1.2) + ((Math.random() * 4) | 0);
           this.boss.hurt(dmg, pl.x, pl.y, this, this.boss.stun > 0);
           this.cam.kick(3);
           this.sfx('hit');
@@ -304,19 +342,55 @@ export class Game {
     this.slashes.push({ x: pl.x, y: pl.y - 6, dir: pl.dir, t: 0 });
   }
 
-  onBlock(pl, fx, fy) {
-    this.cam.kick(3);
+  spawnArrow(pl, angle, bow) {
+    const sp = bow.speed || 190;
+    this.projectiles.push({
+      x: pl.x, y: pl.y - 6,
+      vx: Math.cos(angle) * sp, vy: Math.sin(angle) * sp,
+      life: 1.6, dmg: Math.round(pl.loadout.stat('ranged', 'dmg', 7)),
+      img: Enemy.cache.arrow, rot: angle, friendly: true,
+      pierce: bow.pierce || 0, hits: new Set(),
+    });
+  }
+
+  onEnemyTelegraph(e) {
+    e.flash = 0.18;
+    this.floatText.add(e.x, e.y - 26, '!', '#ff5a4a');
+    this.particles.burst(e.x, e.y - 8, 6,
+      { speed: 30, life: 0.35, col: ['#ff5a4a', '#faea61'], size: 1, drag: 0.9 });
+  }
+
+  onGuardBreak(pl) {
+    this.cam.kick(5);
+    this.sfx('hurt');
+    this.floatText.add(pl.x, pl.y - 30, 'GUARD BROKEN', '#ff5a4a');
+  }
+
+  onBlock(pl, fx, fy, parried) {
+    this.cam.kick(parried ? 3 : 1.5);
     this.sfx('block');
-    this.floatText.add(pl.x, pl.y - 26, 'BLOCK!', '#ffd066');
+    this.floatText.add(pl.x, pl.y - 26, parried ? 'PARRY!' : 'guard',
+                       parried ? '#ffd066' : '#a8b4d8');
+    if (!parried) return;
     this.particles.burst(pl.x + (fx - pl.x) * 0.4, pl.y - 8 + (fy - pl.y) * 0.3, 14,
       { speed: 110, life: 0.35, col: ['#ffffff', '#ffd066', '#b8c2ec'], size: 2, shrink: true, drag: 0.9 });
-    // stun whoever is near and in front
+    // stagger whatever the off-hand reaches
+    const stun = pl.loadout.stat('offhand', 'stun', 2.0);
+    const reach = pl.loadout.stat('offhand', 'aoeStun', 0) || 34;
+    if (reach > 40) {
+      this.cam.kick(5);
+      this.particles.burst(pl.x, pl.y - 8, 26,
+        { speed: 150, life: 0.5, col: ['#ffd066', '#faea61', '#ffffff'], size: 2, shrink: true, drag: 0.9 });
+    }
     for (const e of this.enemies) {
       if (e.dead) continue;
-      if (Math.hypot(e.x - pl.x, e.y - pl.y) < 34) { e.stun = 2.0; e.knock.x = (e.x - pl.x) * 5; e.knock.y = (e.y - pl.y) * 5; }
+      if (Math.hypot(e.x - pl.x, e.y - pl.y) < reach) {
+        e.stun = stun;
+        e.knock.x = (e.x - pl.x) * 5; e.knock.y = (e.y - pl.y) * 5;
+      }
     }
-    if (this.boss.active && Math.hypot(this.boss.x - pl.x, this.boss.y - pl.y) < 60) {
-      this.boss.stun = 1.6; this.boss.dashT = 0;
+    if (this.boss.active && Math.hypot(this.boss.x - pl.x, this.boss.y - pl.y) < Math.max(60, reach)) {
+      this.boss.stun = stun * 0.8; this.boss.dashT = 0;
     }
   }
 
@@ -338,7 +412,7 @@ export class Game {
       this.projectiles.push({ x: e.x, y: e.y - 6, vx: Math.cos(a) * 110, vy: Math.sin(a) * 110,
         life: 2.4, dmg: e.def.dmg, img: Enemy.cache.orb, rot: 0 });
     } else {
-      pl.hurt(e.def.dmg, e.x, e.y, this);
+      pl.hurt(e.def.dmg, e.x, e.y, this, !!e.def.unblockable);
     }
   }
 
@@ -359,7 +433,7 @@ export class Game {
       FX.ghostPoof(this.particles, e.x, e.y);
     }
   }
-  bossTouch(b, pl) { pl.hurt(12, b.x, b.y, this); }
+  bossTouch(b, pl) { pl.hurt(12, b.x, b.y, this, true); }   // the charge cannot be parried
 
   onEnemyKilled(e) {
     const [g0, g1] = e.def.gold;
@@ -369,6 +443,8 @@ export class Game {
     for (const [item, chance] of e.def.drops) {
       if (Math.random() < chance) this.dropPickup(e.x, e.y, 'ing', item);
     }
+    const gear = rollDrop(e.type, Math.random, this.day * 0.1);
+    if (gear) this.dropGear(e.x, e.y, gear);
     this.sfx('kill');
   }
 
@@ -377,6 +453,10 @@ export class Game {
     this.notify('The Hollow Queen falls. Her hive is yours.');
     this.player.gold += 800;
     for (let i = 0; i < 6; i++) this.dropPickup(b.x + (Math.random() - .5) * 40, b.y + (Math.random() - .5) * 30, 'ing', 'honey');
+    bossDrops(Math.random).forEach((g, i) => {
+      const a = (i / 4) * Math.PI * 2;
+      this.dropGear(b.x + Math.cos(a) * 34, b.y + Math.sin(a) * 26, g);
+    });
     for (const id of ['spiritPrali', 'hollowRoyale']) this.unlocked.add(id);
     this.cam.kick(9);
     FX.ghostPoof(this.particles, b.x, b.y - 20);
@@ -386,7 +466,29 @@ export class Game {
     this.pickups.push({ x, y, kind, id, life: 26, bob: Math.random() * 6, qty: 1 });
   }
 
+  dropGear(x, y, gear) {
+    this.pickups.push({ x, y, kind: 'gear', gear, life: 60, bob: Math.random() * 6, qty: 1 });
+    FX.sparkle(this.particles, x, y, RARITY[gear.rarity].col);
+  }
+
   collect(pk) {
+    if (pk.kind === 'gear') {
+      const g = pk.gear;
+      const def = itemDef(g.slot, g.id);
+      const res = this.player.loadout.acquire(g);
+      const rc = RARITY[g.rarity];
+      if (res === 'duplicate') {
+        const worth = 40 + (def.tier || 0) * 60;
+        this.player.gold += worth;
+        this.floatText.add(pk.x, pk.y - 14, '+' + worth + 'g', '#ffd066');
+      } else {
+        this.floatText.add(pk.x, pk.y - 14, `${rc.name} ${def.name}`, rc.col);
+        this.notify(`Found: ${rc.name} ${def.name} — ${def.desc}`);
+      }
+      FX.sparkle(this.particles, pk.x, pk.y, rc.col);
+      this.sfx('pickup');
+      return;
+    }
     if (pk.kind === 'ing') {
       this.inv.ing[pk.id] = (this.inv.ing[pk.id] || 0) + pk.qty;
       this.floatText.add(pk.x, pk.y - 14, '+' + INGREDIENTS[pk.id].name, '#d6f4ff');
@@ -436,7 +538,9 @@ export class Game {
       this.sfx('door');
     } else if (h.kind === 'forage') {
       h.data.taken = true;
-      this.inv.ing[h.data.kind] = (this.inv.ing[h.data.kind] || 0) + 1 + (Math.random() < 0.25 ? 1 : 0);
+      const bonus = this.player.loadout.stat('offhand', 'forageBonus', 0);
+      this.inv.ing[h.data.kind] = (this.inv.ing[h.data.kind] || 0) + 1
+        + (Math.random() < 0.25 ? 1 : 0) + Math.round(bonus);
       this.floatText.add(h.data.x, h.data.y - 12, '+' + INGREDIENTS[h.data.kind].name, '#d6f4ff');
       FX.sparkle(this.particles, h.data.x, h.data.y, '#8fc9dc');
       this.player.en = Math.max(0, this.player.en - 2);
@@ -445,12 +549,16 @@ export class Game {
       this.ui.open('dialogue', { npc: h.data });
     } else if (h.kind === 'cauldron') {
       this.ui.open('craft', { cauldron: h.data.id });
+    } else if (h.kind === 'conche') {
+      this.ui.open('conche', { conche: h.data.id });
     } else if (h.kind === 'recipeBook') {
       this.ui.open('recipes');
     } else if (h.kind === 'counter') {
       this.ui.open('stock', { counter: h.data });
     } else if (h.kind === 'openSign') {
       this.toggleShop();
+    } else if (h.kind === 'vendor') {
+      this.ui.open('vendor', { vendorId: h.data.vendorId });
     }
   }
 
@@ -500,10 +608,25 @@ export class Game {
   shopAppeal() {
     let a = 0;
     for (const c of this.shopCounters()) if (c.item && c.qty > 0) a += 2 + (c.item.star || 0) * 2;
-    return a;
+    return a + this.townHearts() * 1.5;      // a well-liked shop draws a crowd
   }
 
   spawnCustomer() {
+    // townsfolk you know come in first, and come in more often
+    const known = this.npcs.filter(n => !this.customers.some(c => c.npcId === n.def.id));
+    if (known.length && Math.random() < 0.35 + Math.min(0.4, this.townHearts() * 0.03)) {
+      const weights = known.map(n => 1 + (n.hearts || 0) * 0.6);
+      let r = Math.random() * weights.reduce((a, b) => a + b, 0);
+      let pick = known[0];
+      for (let i = 0; i < known.length; i++) { r -= weights[i]; if (r <= 0) { pick = known[i]; break; } }
+      const c = new Customer(pick.def.spec, (15 + Math.random() * 2) * TS, 21 * TS);
+      c.npcId = pick.def.id;
+      c.name = pick.def.name;
+      c.taste = pick.def.likes;
+      c.wallet = 120 + (pick.hearts || 0) * 90 + Math.random() * 260;
+      this.customers.push(c);
+      return;
+    }
     const palettes = [
       { skin: 'skinA', hair: 'ink', hairStyle: 'short', shirt: 'teal', pants: 'ink', shoe: 'wood' },
       { skin: 'skinB', hair: 'wood', hairStyle: 'long', shirt: 'gold', pants: 'plum', shoe: 'ink' },
@@ -513,14 +636,17 @@ export class Game {
     ];
     const sp = palettes[(Math.random() * palettes.length) | 0];
     const c = new Customer(sp, (15 + Math.random() * 2) * TS, 21 * TS);
+    c.taste = [];
     this.customers.push(c);
   }
 
   customerBuy(cust, counter) {
     if (!counter || !counter.item || counter.qty <= 0) return;
     const rec = counter.item;
-    const fair = rec.base * (1 + (counter.quality || 0) * 0.35);
-    const ratio = counter.price / fair;
+    const fair = this.itemValue(rec, counter.quality);
+    const loves = cust.taste && cust.taste.includes(rec.id);
+    // someone buying their favourite will stretch well past the going rate
+    const ratio = counter.price / (fair * (loves ? 1.5 : 1));
     // willingness curve: cheap sells always, overpriced sometimes walks
     const chance = ratio <= 1 ? 1 : Math.max(0.08, 1.55 - ratio * 0.55);
     if (Math.random() > chance) {
@@ -532,9 +658,51 @@ export class Game {
     this.player.gold += paid;
     this.dayGold += paid;
     this.totalSales += 1;
-    this.floatText.add(counter.x + 16, counter.y - 6, '+' + paid + 'g', '#ffd066');
+    this.floatText.add(counter.x + 16, counter.y - 6, '+' + paid + 'g',
+                       loves ? '#c66a7c' : '#ffd066');
+    if (loves && cust.npcId) {
+      const npc = this.npcs.find(n => n.def.id === cust.npcId);
+      if (npc) {
+        npc.friendship = Math.min(1000, (npc.friendship || 0) + 12);
+        npc.hearts = Math.floor(npc.friendship / 100);
+      }
+      this.floatText.add(cust.x, cust.y - 30, 'their favourite!', '#c66a7c');
+    }
     FX.coin(this.particles, counter.x + 16, counter.y);
     this.sfx('sale');
+  }
+
+  /* ---------------- conching: the conventional, hands-off route ---------- */
+  conches() { return this.maps.kitchen.conches || []; }
+
+  /** Load a machine. Cheaper attention, lower quality, bigger batch. */
+  startConche(id, rec) {
+    const c = this.conches()[id];
+    if (!c || c.recipe) return false;
+    if (!this.canCraft(rec)) return false;
+    for (const k in rec.need) this.inv.ing[k] -= rec.need[k];
+    c.recipe = rec;
+    c.dur = 90 + (rec.star || 0) * 45;      // in game-minutes
+    c.t = 0;
+    c.qty = 8 + (rec.star || 0) * 2;
+    this.notify(`The ${rec.name} batch is grinding. It will keep going without you.`);
+    this.sfx('craft');
+    return true;
+  }
+
+  updateConches(dt) {
+    const rate = dt * (this.mapId === 'grove' ? 1.6 : 2.0);   // matches the clock
+    for (const c of this.conches()) {
+      if (!c.recipe) continue;
+      c.t += rate;
+      if (c.t < c.dur) continue;
+      let stock = this.inv.choc.find(x => x.id === c.recipe.id && x.q === 0);
+      if (!stock) { stock = { id: c.recipe.id, q: 0, qty: 0 }; this.inv.choc.push(stock); }
+      stock.qty += c.qty;
+      this.notify(`${c.qty} × ${c.recipe.name} finished conching.`);
+      this.sfx('bell');
+      c.recipe = null; c.t = 0; c.qty = 0;
+    }
   }
 
   /* ---------------- crafting ---------------- */
@@ -552,14 +720,68 @@ export class Game {
     this.player.en = Math.max(0, this.player.en - 6);
     FX.sparkle(this.particles, this.player.x, this.player.y - 10, '#ffd066');
     this.sfx('craft');
-    // discovery: crafting unlocks the next tier
-    const locked = RECIPES.filter(r => !this.unlocked.has(r.id) && (r.star || 0) <= (this.totalCrafts || 0) / 4);
+    // discovery is earned: every few successful batches opens the next tier you
+    // have the ingredients to reach
     this.totalCrafts = (this.totalCrafts || 0) + 1;
-    if (locked.length && Math.random() < 0.5) {
-      this.unlocked.add(locked[0].id);
-      this.notify('New recipe discovered: ' + locked[0].name + '!');
+    if (this.totalCrafts % 2 === 0) {
+      const locked = RECIPES
+        .filter(r => !this.unlocked.has(r.id))
+        .sort((a, b) => (a.star || 0) - (b.star || 0));
+      const reachable = locked.find(r => this.canCraft(r)) || locked[0];
+      if (reachable && (reachable.star || 0) <= 1 + (this.totalCrafts / 4)) {
+        this.unlocked.add(reachable.id);
+        this.notify('New recipe discovered: ' + reachable.name + '!');
+      }
     }
   }
+
+  /** Market value of one chocolate at a given star quality. */
+  itemValue(rec, q) { return Math.round(rec.base * (1 + (q || 0) * 0.35)); }
+
+  /** Guarded spend — gold can never go negative. */
+  spend(n) {
+    if (this.player.gold < n) return false;
+    this.player.gold -= n;
+    this.daySpent = (this.daySpent || 0) + n;
+    return true;
+  }
+
+  buyIngredient(vendorId, entry) {
+    const v = VENDORS[vendorId];
+    const ing = INGREDIENTS[entry.id];
+    const price = Math.round(ing.price * entry.markup);
+    if (!this.spend(price)) { this.notify("You can't afford that."); this.sfx('hurt'); return false; }
+    this.inv.ing[entry.id] = (this.inv.ing[entry.id] || 0) + 1;
+    this.floatText.add(this.player.x, this.player.y - 24, '-' + price + 'g', '#ff9a8a');
+    this.sfx('sale');
+    return true;
+  }
+
+  /** Give a chocolate to a townsperson. One per person per day. */
+  giveGift(npc, stock) {
+    if (npc.giftedDay === this.day) { this.notify(`${npc.def.name} has already had a gift today.`); return false; }
+    const rec = recipeById(stock.id);
+    if (!rec || stock.qty <= 0) return false;
+    stock.qty -= 1;
+    this.inv.choc = this.inv.choc.filter(sx => sx.qty > 0);
+    npc.giftedDay = this.day;
+    const liked = npc.def.likes.includes(rec.id);
+    const gain = Math.round((liked ? 80 : 30) * (1 + (stock.q || 0) * 0.3));
+    const before = npc.hearts;
+    npc.friendship = Math.min(1000, (npc.friendship || 0) + gain);
+    npc.hearts = Math.floor(npc.friendship / 100);
+    this.floatText.add(npc.x, npc.y - 28, (liked ? '♥♥ ' : '♥ ') + '+' + gain, '#c66a7c');
+    FX.sparkle(this.particles, npc.x, npc.y - 10, '#c66a7c');
+    this.sfx('sale');
+    this.notify(liked
+      ? `${npc.def.name} lights up. That was exactly right.`
+      : `${npc.def.name} accepts the ${rec.name} politely.`);
+    if (npc.hearts > before) this.notify(`${npc.def.name} — ${npc.hearts} ♥`);
+    return true;
+  }
+
+  /** Total goodwill in town, which feeds shop footfall. */
+  townHearts() { return this.npcs.reduce((a, n) => a + (n.hearts || 0), 0); }
 
   notify(str) { this.msg = str; this.msgT = 5.0; }
   sfx(name) { if (this.audio) this.audio.play(name); }
@@ -610,6 +832,7 @@ export class Game {
       else if (p.anim === 'candelabra') img = ART.candelabra[Math.floor(this.t * 7) % 4].canvas;
       else if (p.anim === 'fireplace') img = ART.fireplace[Math.floor(this.t * 8) % 4].canvas;
       else if (p.anim === 'chandelier') img = ART.chandelier[Math.floor(this.t * 5) % 4].canvas;
+      else if (p.anim === 'conche') img = ART.conche[Math.floor(this.t * 4) % 4].canvas;
       draw.push({
         sy: p.sy, img, x: p.x, y: p.y,
         shadow: p.shadow ? [Math.round(p.x + img.width / 2 + (p.shadow[1] || 0)), p.sy - 2, p.shadow[0]] : null,
@@ -679,8 +902,11 @@ export class Game {
 
     // pickups
     for (const pk of this.pickups) {
-      const icon = this.icons.ing[pk.id];
-      draw.push({ sy: pk.y + 4, icon, x: Math.round(pk.x - 7), y: Math.round(pk.y - 10 + Math.sin(pk.bob) * 2), glow: '#d6f4ff' });
+      const icon = pk.kind === 'gear'
+        ? this.icons.tool[itemDef(pk.gear.slot, pk.gear.id).icon]
+        : this.icons.ing[pk.id];
+      draw.push({ sy: pk.y + 4, icon, x: Math.round(pk.x - icon.width / 2),
+                  y: Math.round(pk.y - 10 + Math.sin(pk.bob) * 2) });
     }
 
     draw.sort((a, b) => a.sy - b.sy);
@@ -773,9 +999,13 @@ export class Game {
                         (L.intensity != null ? L.intensity : 0.72) * fl, L.warm);
     }
     // player lantern
-    this.lighting.add(this.player.x - camx, this.player.y - camy - 6, 58, '#ffcf8a', 0.5, 0.16);
+    const lampR = 58 + this.player.loadout.stat('offhand', 'lightBonus', 0);
+    this.lighting.add(this.player.x - camx, this.player.y - camy - 6, lampR, '#ffcf8a',
+                      lampR > 80 ? 0.72 : 0.5, 0.16);
     // cauldrons / dynamic
-    for (const pk of this.pickups) this.lighting.add(pk.x - camx, pk.y - camy - 6, 22, '#d6f4ff', 0.8, 0.5);
+    for (const pk of this.pickups)
+      this.lighting.add(pk.x - camx, pk.y - camy - 6, pk.kind === 'gear' ? 30 : 22,
+                        pk.kind === 'gear' ? RARITY[pk.gear.rarity].col : '#d6f4ff', 0.85, 0.55);
     if (this.mapId === 'grove') {
       for (const f of map.forage) if (!f.taken)
         this.lighting.add(f.x - camx, f.y - camy - 4, 26, '#9fd8e8', 0.45, 0.3);

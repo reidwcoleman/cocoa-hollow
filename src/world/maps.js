@@ -78,6 +78,7 @@ export function buildArt() {
   ART.counter = [PR.counter(0), PR.counter(1), PR.counter(2), PR.counter(3)];
   ART.shelf = [PR.shelf(0), PR.shelf(1), PR.shelf(2)];
   ART.cauldron = [0, 1, 2, 3].map(f => PR.cauldron(f));
+  ART.conche = [0, 1, 2, 3].map(f => PR.conche(f));
   ART.table = PR.table();
   ART.chair = PR.chair();
   ART.candelabra = [0, 1, 2, 3].map(f => PR.candelabra(f));
@@ -86,6 +87,11 @@ export function buildArt() {
   ART.forage = {};
   for (const k of ['cocoaPod','sugar','milk','cream','moonberry','gloomcap','frostmint','emberspice','spiritSalt','honey'])
     ART.forage[k] = PR.foragePlant(k);
+  ART.shopfronts = [
+    PR.shopfront({ w: 128, sign: 'BAKERY',     roof: 'roofSlate', stone: 'river', trim: 'wood', seed: 5,  chimneyX: 0.18 }),
+    PR.shopfront({ w: 112, sign: 'APOTHECARY', roof: 'teal',      stone: 'river', trim: 'oak',  seed: 11, chimneyX: 0.78, signCol: '#4fc6ce' }),
+    PR.shopfront({ w: 136, sign: 'THE ANVIL',  roof: 'plum',      stone: 'river', trim: 'wood', seed: 17, chimneyX: 0.24, signCol: '#f0a52a' }),
+  ];
   ART.castle = PR.castleShop();
   ART.houses = [
     PR.townhouse({ w: 74, facadeH: 34, roof: 'plum',  wall: 'masonry', trim: 'wood', seed: 3,  chimneys: [52] }),
@@ -177,6 +183,28 @@ export function buildTown() {
                  to: 'shop', tx: 15 * TS, ty: 15 * TS, label: 'Enter the Shop' });
   // shop-front snow shoveled
   for (let y = doorTY - 1; y < doorTY + 3; y++) for (let x = doorTX - 4; x <= doorTX + 4; x++) m.set(x, y, 'cobbleBare');
+
+  /* ---- shopfronts facing the square ---- */
+  const shopSpots = [[18, 17, 0], [50, 16, 1], [12, 45, 2]];
+  for (const [tx, ty, si] of shopSpots) {
+    const sf = ART.shopfronts[si];
+    const sx = tx * TS, sy = ty * TS;
+    const shW = Math.round(sf.canvas.width * 1.12), shH = Math.round(sf.canvas.height * 0.4);
+    m.decals.push({ x: sx - Math.round(sf.canvas.width * 0.2),
+                    y: sy + sf.groundY - Math.round(shH * 0.42),
+                    img: PR.castShadow(shW, shH) });
+    m.addProp(sx, sy, sf.canvas, sy + sf.groundY);
+    for (const [lx, ly, lr, lit] of sf.lights)
+      if (lit) m.addLight(sx + lx, sy + ly, lr, '#ffcf70', 0.55, 1, 0.7);
+    for (const [smx, smy] of sf.smokes) m.smokes.push([sx + smx, sy + smy]);
+    const bw = Math.ceil(sf.canvas.width / TS);
+    const bh = Math.max(2, Math.ceil((sf.canvas.height - sf.groundY + 40) / TS));
+    m.blockRect(tx, ty + Math.floor(sf.groundY / TS) - bh, bw, bh);
+    m.reserve(tx - 1, ty - 1, bw + 2, Math.ceil(sf.canvas.height / TS) + 2);
+    // swept threshold
+    const dtx = tx + Math.floor(bw / 2), dty = ty + Math.floor(sf.groundY / TS);
+    for (let y = dty; y < dty + 2; y++) for (let x = dtx - 3; x <= dtx + 3; x++) m.set(x, y, 'cobble');
+  }
 
   /* ---- townhouses — pulled in tight around the square ---- */
   const houseSpots = [
@@ -299,6 +327,12 @@ export function buildTown() {
   m.addProp(28 * TS, 28 * TS - 4, ART.barrel, 28 * TS + 16, [7]); m.block(28, 28);
   m.addProp(29 * TS + 4, 29 * TS, ART.crate, 29 * TS + 16, [7]); m.block(29, 29);
   m.addProp(53 * TS, 41 * TS - 4, ART.barrel, 41 * TS + 16, [7]); m.block(53, 41);
+
+  /* ---- vendors: the dairy and the exchange ---- */
+  m.interact.push({ x: 33 * TS, y: 30 * TS, w: TS * 3, h: TS * 2,
+                    type: 'vendor', vendorId: 'dairy', label: "Poppy's Dairy" });
+  m.interact.push({ x: 46 * TS, y: 30 * TS, w: TS * 3, h: TS * 2,
+                    type: 'vendor', vendorId: 'general', label: 'The Hollow Exchange' });
 
   /* ---- street clutter away from the square ---- */
   for (let i = 0; i < 34; i++) {
@@ -469,6 +503,18 @@ export function buildKitchen() {
     m.blockRect(bx, by, 2, 1);
   }
   m.interact.push({ x: 11 * TS, y: 12 * TS, w: TS * 3, h: TS * 2, type: 'recipeBook', label: 'Recipe Book' });
+
+  // conching machines — the hands-off route
+  m.conches = [];
+  [[4, 9], [20, 9]].forEach(([cx, cy], i) => {
+    m.props.push({ x: cx * TS - 9, y: cy * TS - 18, img: ART.conche[0].canvas,
+                   sy: cy * TS + 18, anim: 'conche', shadow: [13] });
+    m.blockRect(cx, cy, 2, 1);
+    m.addLight(cx * TS + 8, cy * TS, 34, '#ffb84a', 0.4, 0, 0.5);
+    m.conches.push({ id: i, recipe: null, t: 0, dur: 0, qty: 0 });
+    m.interact.push({ x: cx * TS - 10, y: cy * TS - 6, w: TS * 3, h: TS * 2,
+                      type: 'conche', id: i, label: 'Conching Machine' });
+  });
 
   for (const [lx, ly] of [[4, 15], [21, 15]]) {
     m.addProp(lx * TS, ly * TS - 14, ART.candelabra[0].canvas, ly * TS + 12);

@@ -17,9 +17,11 @@ python3 server.py 4780      # then open http://127.0.0.1:4780/
 |---|---|
 | `WASD` / arrows | move |
 | `Space` or click | swing |
-| `Shift` | raise shield |
+| right-click / `F` | loose an arrow (with a bow equipped) |
+| `Shift` | raise guard |
 | `E` / `Enter` | interact |
 | `I` / `Tab` | satchel |
+| `G` | equipment |
 | `C` | recipe book |
 | `M` | journal |
 | `Esc` | menu |
@@ -30,10 +32,31 @@ it back to the castle kitchen, pick a recipe at a cauldron, and hit the gold
 band in the tempering minigame for a star-rated batch. Stock your display
 counters, set a price, flip the sign, and watch the town come in.
 
-**Combat** rewards patience over mashing. Blocking a hit with `Shift` while
-facing the attacker stuns it and opens a ~2 second window where your swings are
-faster and hit harder. The Hollow Queen at the far east of the grove is the
-first real test of it.
+**Combat** rewards reading your opponent, not holding a button. Every enemy
+telegraphs before it commits — a flash and a `!`. Raise the guard *into* that
+blow and you **parry**: the hit is negated, the attacker is stunned, and you get
+a window where your swings are faster and hit harder. Stand behind a guard you
+raised early and you merely **soak** it — chip damage, stamina drain, and if
+your stamina runs out the guard breaks. The pot crab's slam and the Hollow
+Queen's charge cannot be parried at all; those you have to step out of.
+
+**Your off-hand is your build.** A buckler is the parry engine. The *Warding
+Bell* staggers everything in a wide ring on a parry. The *Spirit Ward* turns
+projectiles around and sends them back harder. The *Gloom Lantern* gives up
+guarding entirely for a much wider light and a bigger forage haul, and an empty
+off-hand trades safety for raw speed and damage. Weapons, off-hands and bows
+drop from enemies at four rarities; the Hollow Queen pays out a full set.
+
+**Two ways to make chocolate**, with reasons to use both. The **cauldron** is
+hands-on: a tempering minigame that pays in star quality, and stars multiply an
+item's value. The **conching machine** is hands-off: load it, walk away, forage
+or fight, and come back to a much larger batch at plain quality.
+
+**The town remembers you.** Gift chocolate to townsfolk — one each per day, and
+their favourites count double — and their hearts rise, their dialogue warms,
+and they start coming to the shop themselves, paying a premium for the thing
+they love. Town goodwill widens the crowd. Gold goes back out at the dairy and
+the exchange, which sell ingredients you'd otherwise have to fight for.
 
 **Pricing** matters. Every chocolate has a market value based on its recipe and
 star rating. Undercut it and everything sells; go much above it and customers

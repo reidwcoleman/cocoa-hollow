@@ -1,9 +1,10 @@
 // HUD and all interface panels.
 
 import { VW, VH } from './engine/core.js';
-import { drawText, textWidth, wrapText, panel, slot, bar } from './art/font.js';
+import { drawText, textWidth, wrapText, panel, slot, slot as slot_, bar } from './art/font.js';
 import { RAMP, C, mix } from './art/palette.js';
-import { INGREDIENTS, INGREDIENT_ORDER, RECIPES, recipeById } from './data.js';
+import { INGREDIENTS, INGREDIENT_ORDER, RECIPES, recipeById, VENDORS } from './data.js';
+import { itemDef, RARITY, OFFHANDS } from './gear.js';
 
 const R = RAMP;
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -39,7 +40,7 @@ export class UI {
       }
     }
     if (this.mode === 'dayEnd' && (inp.wasPressed('Enter', ' ', 'Escape') || inp.mouse.pressed)) this.close();
-    if (this.mode === 'dialogue' && (inp.wasPressed('Enter', 'e', ' ', 'Escape') || inp.mouse.pressed)) this.close();
+    if (this.mode === 'dialogue' && inp.wasPressed('Enter', 'e', ' ', 'Escape')) this.close();
   }
 
   resolveCraft(q) {
@@ -75,6 +76,9 @@ export class UI {
       case 'dayEnd': this.panelDayEnd(g); break;
       case 'journal': this.panelJournal(g); break;
       case 'menu': this.panelMenu(g); break;
+      case 'gear': this.panelGear(g); break;
+      case 'vendor': this.panelVendor(g); break;
+      case 'conche': this.panelConche(g); break;
     }
   }
 
@@ -503,10 +507,39 @@ export class UI {
     g.fillRect(x + 12, y + 54, 34, 4);
 
     drawText(g, npc.def.name, x + 54, y + 14, { color: C.textGold });
-    const line = npc.def.lines[npc.lineIdx % npc.def.lines.length];
+    // hearts
+    for (let i = 0; i < 5; i++)
+      drawText(g, '♥', x + 108 + i * 8, y + 14,
+               { color: i < (npc.hearts || 0) ? '#c66a7c' : '#3a2536' });
+
+    // warmer people say warmer things
+    const pool = (npc.hearts >= 4 && npc.def.close) ? npc.def.close
+               : (npc.hearts >= 2 && npc.def.warm) ? npc.def.warm
+               : npc.def.lines;
+    const line = pool[npc.lineIdx % pool.length];
     const lines = wrapText(line, w - 74);
     lines.forEach((l, i) => drawText(g, l, x + 54, y + 28 + i * 11, { color: C.text }));
-    drawText(g, '[E] continue', x + w - 16, y + h - 16, { color: C.textDim, align: 'right' });
+
+    // gift row
+    const gifted = npc.giftedDay === G.day;
+    drawText(g, gifted ? 'already gifted today' : 'give a gift:', x + 54, y + h - 26,
+             { color: gifted ? '#6a5a70' : C.textDim });
+    if (!gifted) {
+      G.inv.choc.slice(0, 6).forEach((st, i) => {
+        const bx = x + 120 + i * 22, by = y + h - 30;
+        const over = this.hitTest(null, bx, by, 20, 20);
+        slot_(g, bx, by, 20, over, false);
+        const rec = recipeById(st.id);
+        g.drawImage(G.icons.choc[`${rec.kind}_${st.q}`], bx + 3, by + 3);
+        if (over) {
+          const liked = npc.def.likes.includes(rec.id);
+          drawText(g, rec.name + (liked ? ' ♥' : ''), x + 54, y + h - 15,
+                   { color: liked ? '#c66a7c' : C.textDim });
+        }
+        if (this.clicked(bx, by, 20, 20)) { G.giveGift(npc, st); this.close(); }
+      });
+    }
+    drawText(g, '[E] leave', x + w - 16, y + h - 14, { color: C.textDim, align: 'right' });
     if (!this.ctx.advanced) { npc.lineIdx++; this.ctx.advanced = true; }
   }
 
@@ -546,6 +579,143 @@ export class UI {
     });
     const t = wrapText('"They never left. They just wanted someone to open the shop again."', w - 40);
     t.forEach((l, i) => drawText(g, l, x + w / 2, y + h - 40 + i * 11, { color: '#7a5a3c', align: 'center', shadow: null }));
+  }
+
+  /* ---------------- conching machine ---------------- */
+  panelConche(g) {
+    const G = this.game;
+    const c = G.conches()[this.ctx.conche || 0];
+    const w = 280, h = 170, x = (VW - w) / 2, y = (VH - h) / 2;
+    panel(g, x, y, w, h, 'wood');
+    this.header(g, x, y, w, 'CONCHING MACHINE');
+    this.closeBtn(g, x + w - 18, y + 6);
+
+    if (!c) return;
+    if (c.recipe) {
+      drawText(g, 'Grinding: ' + c.recipe.name, x + w / 2, y + 34, { color: C.text, align: 'center' });
+      g.drawImage(G.icons.choc[`${c.recipe.kind}_0`], x + w / 2 - 7, y + 48);
+      bar(g, x + 30, y + 74, w - 60, 12, c.t / c.dur, '#f0a52a', '#a53025', '#3c1020');
+      drawText(g, `${Math.round(100 * c.t / c.dur)}%  —  ${c.qty} on the way`,
+               x + w / 2, y + 92, { color: C.textGold, align: 'center' });
+      const t = wrapText('It runs on its own. Go forage, go fight — it will be done when you get back.', w - 40);
+      t.forEach((l, i) => drawText(g, l, x + w / 2, y + 112 + i * 11, { color: C.textDim, align: 'center' }));
+      return;
+    }
+
+    const t = wrapText('Slower and plainer than tempering by hand — but it needs none of your attention, and it makes far more.', w - 36);
+    t.forEach((l, i) => drawText(g, l, x + w / 2, y + 26 + i * 10, { color: C.textDim, align: 'center' }));
+
+    const known = RECIPES.filter(r => G.unlocked.has(r.id));
+    known.forEach((rec, i) => {
+      const ry = y + 56 + i * 17;
+      if (ry > y + h - 22) return;
+      const can = G.canCraft(rec);
+      const over = this.hitTest(null, x + 14, ry, w - 28, 15);
+      if (over && can) { g.fillStyle = 'rgba(208,164,55,0.14)'; g.fillRect(x + 14, ry, w - 28, 15); }
+      g.globalAlpha = can ? 1 : 0.4;
+      g.drawImage(G.icons.choc[`${rec.kind}_0`], x + 18, ry + 1);
+      drawText(g, rec.name, x + 36, ry + 3, { color: can ? C.text : '#7a6a70' });
+      drawText(g, `${8 + (rec.star || 0) * 2} per batch`, x + w - 20, ry + 3,
+               { color: C.textDim, align: 'right' });
+      g.globalAlpha = 1;
+      if (can && this.clicked(x + 14, ry, w - 28, 15)) {
+        G.startConche(this.ctx.conche || 0, rec);
+        this.close();
+      }
+    });
+  }
+
+  /* ---------------- vendor ---------------- */
+  panelVendor(g) {
+    const G = this.game;
+    const v = VENDORS[this.ctx.vendorId] || VENDORS.dairy;
+    const w = 260, h = 150, x = (VW - w) / 2, y = (VH - h) / 2;
+    panel(g, x, y, w, h, 'wood');
+    this.header(g, x, y, w, v.name.toUpperCase());
+    this.closeBtn(g, x + w - 18, y + 6);
+    drawText(g, v.line, x + w / 2, y + 26, { color: C.textDim, align: 'center' });
+
+    v.stock.forEach((entry, i) => {
+      const ing = INGREDIENTS[entry.id];
+      const price = Math.round(ing.price * entry.markup);
+      const ry = y + 42 + i * 22;
+      const afford = G.player.gold >= price;
+      const over = this.hitTest(null, x + 14, ry, w - 28, 20);
+      g.fillStyle = over && afford ? '#4a3320' : '#241729';
+      g.fillRect(x + 14, ry, w - 28, 20);
+      g.drawImage(G.icons.ing[entry.id], x + 18, ry + 3);
+      drawText(g, ing.name, x + 36, ry + 6, { color: afford ? C.text : '#7a6a70' });
+      drawText(g, 'have ' + (G.inv.ing[entry.id] || 0), x + 150, ry + 6, { color: C.textDim });
+      drawText(g, price + 'g', x + w - 20, ry + 6,
+               { color: afford ? C.textGold : '#c8384e', align: 'right' });
+      if (afford && this.clicked(x + 14, ry, w - 28, 20)) G.buyIngredient(this.ctx.vendorId, entry);
+    });
+
+    g.drawImage(G.icons.coin, x + 16, y + h - 22);
+    drawText(g, String(G.player.gold) + 'g', x + 30, y + h - 20, { color: C.textGold });
+    drawText(g, 'click to buy one', x + w - 16, y + h - 20, { color: C.textDim, align: 'right' });
+  }
+
+  /* ---------------- equipment ---------------- */
+  panelGear(g) {
+    const G = this.game, L = G.player.loadout;
+    const w = 340, h = 200, x = (VW - w) / 2, y = (VH - h) / 2;
+    panel(g, x, y, w, h, 'wood');
+    this.header(g, x, y, w, 'EQUIPMENT');
+    this.closeBtn(g, x + w - 18, y + 6);
+
+    const SLOTS = [['weapon', 'MAIN HAND'], ['offhand', 'OFF HAND'], ['ranged', 'RANGED']];
+    let colX = x + 14;
+    let detail = null;
+
+    for (const [slot, label] of SLOTS) {
+      drawText(g, label, colX, y + 26, { color: C.textDim });
+      // equipped
+      const eq = L[slot];
+      const eqDef = eq ? itemDef(slot, eq.id) : null;
+      slot_(g, colX, y + 36, 28, true, !eqDef);
+      if (eqDef) {
+        const ic = G.icons.tool[eqDef.icon];
+        g.drawImage(ic, colX + 7, y + 43);
+        g.fillStyle = RARITY[eq.rarity].col;
+        g.fillRect(colX, y + 36, 28, 1);
+      }
+      // owned list for this slot
+      const owned = L.forSlot(slot);
+      owned.forEach((o, i) => {
+        const bx = colX, by = y + 72 + i * 20;
+        if (by > y + h - 34) return;
+        const on = eq && eq.id === o.id;
+        const over = this.hitTest(null, bx, by, 100, 18);
+        g.fillStyle = on ? '#4a3320' : over ? '#3a2536' : '#241729';
+        g.fillRect(bx, by, 100, 18);
+        g.fillStyle = RARITY[o.rarity].col;
+        g.fillRect(bx, by, 2, 18);
+        const d = itemDef(slot, o.id);
+        const ic = G.icons.tool[d.icon];
+        g.drawImage(ic, bx + 4, by + 2);
+        drawText(g, d.name.length > 13 ? d.name.slice(0, 12) + '.' : d.name,
+                 bx + 21, by + 6, { color: on ? C.textGold : C.text });
+        if (over) detail = { d, r: o.rarity, slot };
+        if (this.clicked(bx, by, 100, 18)) {
+          L.equip(slot, o.id, o.rarity);
+          G.sfx('place');
+        }
+      });
+      colX += 108;
+    }
+
+    // detail strip
+    g.fillStyle = '#160e1e'; g.fillRect(x + 12, y + h - 30, w - 24, 20);
+    g.fillStyle = '#3a2536'; g.fillRect(x + 12, y + h - 30, w - 24, 1);
+    if (detail) {
+      drawText(g, `${RARITY[detail.r].name} ${detail.d.name}`, x + 18, y + h - 26,
+               { color: RARITY[detail.r].col });
+      drawText(g, detail.d.desc, x + 18, y + h - 17, { color: C.textDim });
+    } else {
+      const od = L.def('offhand');
+      drawText(g, od ? od.desc : '', x + 18, y + h - 22, { color: C.textDim });
+    }
   }
 
   /* ---------------- menu ---------------- */

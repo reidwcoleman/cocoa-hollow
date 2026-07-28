@@ -111,12 +111,93 @@ check('blocking stuns the attacker', () => {
   G.enemies.push(e);
   G.player.dir = 2;
   G.player.blocking = true;
+  G.player.blockRaisedT = 0;          // guard raised *into* the blow = parry
   G.player.iframe = 0;
   const r = G.player.hurt(5, e.x, e.y, G);
-  assert(r === 'blocked', 'hit was not blocked, got: ' + r);
+  assert(r === 'parried', 'hit was not parried, got: ' + r);
   assert(e.stun > 0, 'enemy was not stunned');
   assert(G.player.fastWindow > 0, 'no fast-attack window granted');
   return `stun ${e.stun.toFixed(1)}s, fast window ${G.player.fastWindow.toFixed(1)}s`;
+});
+
+check('a held guard soaks instead of parrying', () => {
+  G.setMap('grove', 30 * TS, 26 * TS);
+  G.player.dir = 2;
+  G.player.blocking = true;
+  G.player.blockRaisedT = 1.5;        // held too long — no parry
+  G.player.iframe = 0;
+  G.player.en = 100;
+  const hp0 = G.player.hp;
+  const r = G.player.hurt(10, G.player.x + 12, G.player.y, G);
+  assert(r === 'guarded', 'expected a guard, got: ' + r);
+  assert(G.player.hp < hp0, 'guarding took no chip damage');
+  assert(G.player.hp > hp0 - 10, 'guard did not reduce the hit');
+  return `chip ${hp0 - G.player.hp} of 10`;
+});
+
+check('enemies telegraph before they swing', () => {
+  G.ui.close();
+  G.setMap('grove', 30 * TS, 26 * TS);
+  G.enemies.length = 0;
+  const e = new Enemy('slime', G.player.x + 10, G.player.y);
+  e.cd = 0; e.stun = 0;
+  G.enemies.push(e);
+  G.player.iframe = 99;               // ignore the damage, watch the wind-up
+  G.player.knock.x = 0; G.player.knock.y = 0;   // clear bleed from the last check
+  let seen = 0;
+  for (let i = 0; i < 6; i++) {
+    e.x = G.player.x + 10; e.y = G.player.y;    // hold it inside its reach
+    G.update(1 / 60);
+    if (e.windup > 0) seen++;
+  }
+  G.player.iframe = 0;
+  assert(seen > 0,
+    `no wind-up seen (mapId=${G.mapId} ui=${G.ui.mode} stun=${e.stun.toFixed(2)} ` +
+    `cd=${e.cd.toFixed(2)} dead=${e.dead} dist=${Math.hypot(e.x - G.player.x, e.y - G.player.y).toFixed(1)})`);
+  return `wind-up held for ${seen} frames`;
+});
+
+check('gear drops can be equipped and change the swing', () => {
+  const L = G.player.loadout;
+  const before = G.player.swingDamage(false);
+  L.acquire({ slot: 'weapon', id: 'hollowCleaver', rarity: 'spectral' });
+  L.equip('weapon', 'hollowCleaver', 'spectral');
+  const after = G.player.swingDamage(false);
+  assert(after > before, `damage unchanged (${before} -> ${after})`);
+  L.equip('weapon', 'rustedBlade', 'common');
+  return `${before} -> ${after} with a spectral cleaver`;
+});
+
+check('the bow fires and hurts an enemy', () => {
+  G.setMap('grove', 30 * TS, 26 * TS);
+  G.enemies.length = 0;
+  G.projectiles.length = 0;
+  const L = G.player.loadout;
+  L.acquire({ slot: 'ranged', id: 'huntingBow', rarity: 'common' });
+  L.equip('ranged', 'huntingBow', 'common');
+  const e = new Enemy('slime', G.player.x + 34, G.player.y);
+  G.enemies.push(e);
+  G.player.dir = 2; G.player.shootCd = 0; G.player.en = 100;
+  G.player.swingT = 0; G.player.swingCd = 0;
+  const hp0 = e.hp;
+  G.player.shoot(G);
+  assert(G.projectiles.length === 1,
+    `no arrow spawned (bow=${!!L.def('ranged')} swingT=${G.player.swingT.toFixed(2)} ` +
+    `shootCd=${G.player.shootCd.toFixed(2)} en=${G.player.en.toFixed(0)})`);
+  step(30);
+  assert(e.hp < hp0, `arrow did not connect (${e.hp}/${hp0})`);
+  return `arrow took ${hp0 - e.hp}`;
+});
+
+check('an empty off-hand cannot block at all', () => {
+  const L = G.player.loadout;
+  L.equip('offhand', 'none', 'common');
+  assert(!L.canBlock(), 'bare hand still blocks');
+  G.player.iframe = 0; G.player.blocking = true; G.player.blockRaisedT = 0;
+  const r = G.player.hurt(6, G.player.x + 10, G.player.y, G);
+  assert(r === true, 'expected a clean hit, got: ' + r);
+  L.equip('offhand', 'oakBuckler', 'common');
+  return 'bare hand takes the hit';
 });
 
 check('unblocked hits cost health', () => {
@@ -298,7 +379,9 @@ check('every UI panel renders without throwing', () => {
   for (const mode of modes) {
     G.setMap(mode === 'stock' ? 'shop' : 'town', 41 * TS, 34 * TS);
     const ctx = mode === 'stock' ? { counter: G.shopCounters()[0] }
-              : mode === 'dialogue' ? { npc: G.npcs[0] } : {};
+              : mode === 'dialogue' ? { npc: G.npcs[0] }
+              : mode === 'vendor' ? { vendorId: 'dairy' }
+              : mode === 'conche' ? { conche: 0 } : {};
     G.ui.open(mode, ctx);
     G.ui.render(G.g);
     done.push(mode);
@@ -329,6 +412,97 @@ check('NPC dialogue advances', () => {
   assert(npc.lineIdx === i0 + 1, 'line did not advance');
   G.ui.close();
   return `${npc.def.name}: line ${npc.lineIdx}`;
+});
+
+/* ---------------- the two crafting routes ---------------- */
+check('conching runs unattended and yields a bigger, plainer batch', () => {
+  G.ui.close();
+  G.setMap('kitchen', 12 * TS, 10 * TS);
+  const rec = recipeById('darkTruffle');
+  for (const k in rec.need) G.inv.ing[k] = 20;
+  G.inv.choc = [];
+  const cocoa0 = G.inv.ing.cocoaPod;
+  assert(G.startConche(0, rec), 'machine refused a valid batch');
+  assert(G.inv.ing.cocoaPod < cocoa0, 'ingredients not taken up front');
+  assert(!G.startConche(0, rec), 'accepted a second batch while busy');
+  // it should finish on its own, with the player elsewhere
+  G.setMap('grove', 30 * TS, 26 * TS);
+  let guard = 0;
+  while (G.conches()[0].recipe && guard++ < 60 * 400) G.update(1 / 60);
+  const made = G.inv.choc.reduce((a, s2) => a + s2.qty, 0);
+  assert(made >= 8, `batch too small: ${made}`);
+  assert(G.inv.choc.every(s2 => s2.q === 0), 'conching should only make base quality');
+  G.setMap('kitchen', 12 * TS, 10 * TS);
+  return `${made} made hands-off, all base quality`;
+});
+
+check('tempering by hand pays in quality instead of volume', () => {
+  const rec = recipeById('darkTruffle');
+  for (const k in rec.need) G.inv.ing[k] = 20;
+  G.inv.choc = [];
+  G.doCraft(rec, 2);                       // a perfect temper
+  const s2 = G.inv.choc[0];
+  assert(s2.q === 2, 'hand tempering lost its star rating');
+  assert(s2.qty < 8, 'hand batch should be smaller than a conched one');
+  assert(G.itemValue(rec, 2) > G.itemValue(rec, 0), 'stars are worth nothing');
+  return `${s2.qty} at ★★ — worth ${G.itemValue(rec, 2)}g each vs ${G.itemValue(rec, 0)}g`;
+});
+
+/* ---------------- social + economy ---------------- */
+check('gifting raises friendship and is limited to one a day', () => {
+  const npc = G.npcs.find(n => n.def.id === 'ines');
+  npc.friendship = 0; npc.hearts = 0; npc.giftedDay = -1;
+  const rec = recipeById('rubyHeart');          // one of theirs
+  G.inv.choc = [{ id: rec.id, q: 1, qty: 4 }];
+  const ok = G.giveGift(npc, G.inv.choc[0]);
+  assert(ok, 'gift refused');
+  assert(npc.friendship > 0, 'friendship unchanged');
+  const after = npc.friendship;
+  const again = G.giveGift(npc, G.inv.choc[0]);
+  assert(!again, 'accepted a second gift the same day');
+  assert(npc.friendship === after, 'friendship moved on the refused gift');
+  return `liked gift gave +${after}`;
+});
+
+check('a liked chocolate is worth more to the right person', () => {
+  const rec = recipeById('rubyHeart');
+  const c = G.shopCounters()[0];
+  c.item = rec; c.quality = 0; c.qty = 500;
+  c.price = Math.round(G.itemValue(rec, 0) * 1.35);   // over the going rate
+  let plain = 0, fan = 0;
+  for (let i = 0; i < 300; i++) {
+    const q0 = c.qty;
+    G.customerBuy({ x: 0, y: 0, wallet: 99999, taste: [] }, c);
+    if (c.qty < q0) plain++;
+    const q1 = c.qty;
+    G.customerBuy({ x: 0, y: 0, wallet: 99999, taste: [rec.id] }, c);
+    if (c.qty < q1) fan++;
+  }
+  assert(fan > plain, `fans did not pay more readily (${fan} vs ${plain})`);
+  return `${fan}/300 fans bought vs ${plain}/300 others`;
+});
+
+check('vendors take gold and hand over goods', () => {
+  G.player.gold = 500;
+  const before = G.inv.ing.milk || 0;
+  const bought = G.buyIngredient('dairy', { id: 'milk', markup: 1.4 });
+  assert(bought, 'purchase refused with 500g in hand');
+  assert((G.inv.ing.milk || 0) === before + 1, 'no milk delivered');
+  assert(G.player.gold < 500, 'gold not deducted');
+  G.player.gold = 0;
+  assert(!G.buyIngredient('dairy', { id: 'cream', markup: 1.4 }), 'sold on credit');
+  assert(G.player.gold === 0, 'gold went negative');
+  return 'pays, delivers, refuses when broke';
+});
+
+check('town goodwill widens the crowd', () => {
+  G.npcs.forEach(n => { n.hearts = 0; n.friendship = 0; });
+  const cold = G.shopAppeal();
+  G.npcs.forEach(n => { n.hearts = 4; n.friendship = 400; });
+  const warm = G.shopAppeal();
+  assert(warm > cold, `appeal did not rise (${cold} -> ${warm})`);
+  G.npcs.forEach(n => { n.hearts = 0; n.friendship = 0; });
+  return `${cold} -> ${warm} at four hearts each`;
 });
 
 /* ---------------- render smoke test ---------------- */
