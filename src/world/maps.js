@@ -377,95 +377,119 @@ export function buildTown() {
 /* ================================================================== *
  * SHOP INTERIOR
  * ================================================================== */
+/**
+ * Build a rectilinear room: floor/wall tiles inside a union of rects, solid
+ * everywhere else, and a carved moulding traced round the resulting outline.
+ * `rects` are [x, y, w, h] in tiles. Returns helpers the caller needs.
+ */
+function carveRoom(m, rects, opts) {
+  const wallH = opts.wallH != null ? opts.wallH : 3;
+  const wallTile = opts.wall || 'roomBrick';
+  const floorTile = opts.floor || 'woodFloor';
+
+  const inRoomTile = (tx, ty) => rects.some(([rx, ry, rw, rh]) =>
+    tx >= rx && ty >= ry && tx < rx + rw && ty < ry + rh);
+
+  // the wall band is the top `wallH` rows of whichever rect a tile belongs to
+  const topOf = (tx, ty) => {
+    let best = Infinity;
+    for (const [rx, ry, rw] of rects)
+      if (tx >= rx && tx < rx + rw) best = Math.min(best, ry);
+    return best;
+  };
+
+  for (let ty = 0; ty < m.h; ty++) {
+    for (let tx = 0; tx < m.w; tx++) {
+      if (!inRoomTile(tx, ty)) { m.set(tx, ty, 'void'); m.block(tx, ty); continue; }
+      const isWall = ty < topOf(tx, ty) + wallH;
+      m.set(tx, ty, isWall ? wallTile : floorTile);
+      if (isWall) m.block(tx, ty);
+    }
+  }
+
+  // moulding traced from the pixel silhouette — corners mitre for free
+  const insidePx = (px, py) => inRoomTile(Math.floor(px / TS), Math.floor(py / TS));
+  const fr = PR.roomFrameFromMask(m.w * TS, m.h * TS, insidePx);
+  m.addProp(0, 0, fr.canvas, 1e9);
+
+  return { inRoomTile, topOf };
+}
+
 export function buildShop() {
-  // The map is exactly one screen. The room sits inside it as a framed island
-  // on black, so the camera can hold the whole shop at once — that framing is
-  // the signature of the interior idiom this game is built in.
-  const W = 25, H = 14;
+  // A 30x17 stage. The room is a rectilinear polygon — a wide upper block, an
+  // inset lower block and a porch pushing out of the bottom edge — sitting on
+  // warm black with generous, deliberately unequal margins. A plain rectangle
+  // sized to the viewport is the thing that reads as a placeholder.
+  const W = 30, H = 17;
   const m = new GameMap('shop', W, H, { base: 'void', indoor: true, name: 'The Cocoa Hollow' });
-  m.ambient = { key: 'night', amount: 0.30, tint: '#6a4438', bloom: 0.62, vignetteAmt: 0.20 };
-  m.fill(0, 0, W, H, 'void');
+  m.ambient = { key: 'night', amount: 0.30, tint: '#6a4438', bloom: 0.55, vignetteAmt: 0.16 };
 
-  // room footprint, in tiles (inclusive)
-  const RX0 = 2, RY0 = 1, RX1 = 22, RY1 = 12;
-  const WALLH = 3;                                   // rows of brick above the floor
-  const FY0 = RY0 + WALLH;                           // first floor row
+  const UPPER = [2, 2, 24, 7];       // x, y, w, h in tiles
+  const LOWER = [9, 9, 17, 5];
+  const PORCH = [16, 14, 3, 1];
+  const rects = [UPPER, LOWER, PORCH];
+  const WALLH = 3;
+  carveRoom(m, rects, { wallH: WALLH, wall: 'roomBrick', floor: 'woodFloor' });
 
-  for (let y = RY0; y <= RY1; y++)
-    for (let x = RX0; x <= RX1; x++)
-      m.set(x, y, y < FY0 ? 'roomBrick' : 'woodFloor');
+  const FY0 = UPPER[1] + WALLH;                   // first walkable row, 5
+  const LOWY = LOWER[1];                          // 9 — the lower terrace
+  const RX0 = UPPER[0], RX1 = UPPER[0] + UPPER[2] - 1;
 
-  // a raised step across the left third — an irregular floor reads as a room
-  // someone built, not a box
-  const STEPX = RX0 + 6;
-  for (let y = FY0 + 4; y <= RY1; y++)
-    for (let x = RX0; x < STEPX; x++) m.set(x, y, 'woodFloorDark');
-
-  /* ---- solid everywhere except the floor ---- */
-  for (let y = 0; y < H; y++)
-    for (let x = 0; x < W; x++)
-      if (x < RX0 || x > RX1 || y < FY0 || y > RY1) m.block(x, y);
-
-  /* ---- the moulded frame, drawn over everything at the room edge ---- */
-  const fw = (RX1 - RX0 + 1) * TS, fh = (RY1 - RY0 + 1) * TS;
-  const fr = PR.roomFrame(fw + 16, fh + 16);
-  m.addProp(RX0 * TS - 8, RY0 * TS - 8, fr.canvas, 1e9);
+  // the lower block sits a step down; darker boards plus a lit riser face
+  for (let y = LOWY; y < LOWER[1] + LOWER[3]; y++)
+    for (let x = LOWER[0]; x < LOWER[0] + LOWER[2]; x++) m.set(x, y, 'woodFloorDark');
+  m.addProp(LOWER[0] * TS, LOWY * TS - 9, PR.terraceRiser(LOWER[2] * TS), LOWY * TS - 1);
 
   /* ---- back wall dressing ---- */
-  m.addProp(9 * TS, RY0 * TS + 2, PR.curtain(7 * TS, WALLH * TS - 6), FY0 * TS - 2);
-  m.addProp(RX0 * TS + 6, RY0 * TS + 6, ART.wallCabinet, FY0 * TS - 3);
-  for (const sx of [17, 20]) {
-    m.addProp(sx * TS, RY0 * TS + 6, ART.shelf[sx % 3], FY0 * TS - 1, null);
-  }
+  m.addProp(11 * TS, UPPER[1] * TS + 2, PR.curtain(7 * TS, WALLH * TS - 6), FY0 * TS - 2);
+  m.addProp(RX0 * TS + 6, UPPER[1] * TS + 6, ART.wallCabinet, FY0 * TS - 3);
+  for (const sx of [19, 22]) m.addProp(sx * TS, UPPER[1] * TS + 6, ART.shelf[sx % 3], FY0 * TS - 1);
   const fp = PR.fireplace(0);
-  m.addProp(6 * TS, RY0 * TS + 4, fp.canvas, FY0 * TS + 2);
+  m.addProp(8 * TS, UPPER[1] * TS + 4, fp.canvas, FY0 * TS + 2);
   m.props[m.props.length - 1].anim = 'fireplace';
-  m.addLight(6 * TS + fp.light[0], RY0 * TS + 4 + fp.light[1], 96, '#ff9a3c', 0.85, 1, 0.95);
+  // a hearth is the only source that lights a room — about three tiles of reach
+  m.addLight(8 * TS + fp.light[0], UPPER[1] * TS + 4 + fp.light[1], 54, '#ff9a3c', 0.8, 1, 0.9);
 
-  /* ---- rug on the main floor ---- */
-  m.decals.push({ x: 10 * TS, y: (FY0 + 3) * TS, img: PR.rugLarge(9 * TS, 5 * TS) });
+  m.decals.push({ x: 12 * TS, y: (LOWY + 1) * TS, img: PR.rugLarge(9 * TS, 3 * TS) });
 
-  /* ---- display counters ---- */
+  /* ---- furniture pressed to the walls; the middle stays open ---- */
   m.counterSlots = [];
-  const cSpots = [[8, FY0 + 1], [12, FY0 + 1], [16, FY0 + 1], [19, FY0 + 1],
-                  [3, FY0 + 6], [20, FY0 + 6]];
+  const cSpots = [[4, FY0], [8, FY0], [15, FY0], [19, FY0], [23, FY0], [10, LOWY + 3]];
   cSpots.forEach(([cx, cy], i) => {
     m.addProp(cx * TS, cy * TS - 10, ART.counter[i % 4], cy * TS + 16, [15]);
     m.blockRect(cx, cy, 2, 1);
     m.counterSlots.push({ tx: cx, ty: cy, x: cx * TS, y: cy * TS - 10,
                           item: null, qty: 0, price: 0, style: i % 4, id: i });
   });
-
-  /* ---- seating, greenery, stock ---- */
-  for (const [tx, ty] of [[9, RY1 - 1], [17, RY1 - 1]]) {
+  for (const [tx, ty] of [[21, LOWY + 3], [24, LOWY + 1]]) {
     m.addProp(tx * TS, ty * TS - 6, ART.table, ty * TS + 16, [11]);
     m.blockRect(tx, ty, 2, 1);
     m.addProp((tx - 1) * TS - 4, ty * TS - 10, ART.chair, ty * TS + 15, [6]);
   }
-  for (const [px2, py2] of [[RX0, FY0 + 1], [RX1 - 1, FY0 + 1], [RX1 - 1, RY1 - 1]]) {
+  for (const [px2, py2] of [[RX0, FY0 + 1], [RX1 - 1, FY0 + 1], [RX0, FY0 + 3]]) {
     m.addProp(px2 * TS, py2 * TS - 14, PR.pottedPlant(px2), py2 * TS + 14, [8]);
     m.block(px2, py2);
   }
-  m.addProp(4 * TS, (RY1 - 1) * TS - 4, ART.barrel, (RY1 - 1) * TS + 14, [7]);
-  m.block(4, RY1 - 1);
+  m.addProp(4 * TS, (FY0 + 3) * TS - 4, ART.barrel, (FY0 + 3) * TS + 14, [7]);
+  m.block(4, FY0 + 3);
 
-  /* ---- warm pools; the lamps themselves hang out of frame ---- */
-  for (const [cx, cy] of [[7, FY0 + 3], [13, FY0 + 2], [19, FY0 + 4]])
-    m.addLight(cx * TS, cy * TS, 92, '#ffb066', 0.5, 0, 0.72);
+  /* ---- lamps reach about two tiles, no more ---- */
+  for (const [cx, cy] of [[14, FY0 + 2], [22, FY0 + 2], [16, LOWY + 2]])
+    m.addLight(cx * TS, cy * TS, 38, '#ffb066', 0.42, 0, 0.6);
 
-  /* ---- exits ---- */
-  const doorX = 12;
-  m.warps.push({ x: doorX * TS, y: RY1 * TS, w: TS * 2, h: TS,
+  /* ---- the porch notch is the way out ---- */
+  const doorX = PORCH[0] + 1;
+  m.warps.push({ x: PORCH[0] * TS, y: PORCH[1] * TS, w: PORCH[2] * TS, h: TS,
                  to: 'town', tx: 41 * TS, ty: 0, label: 'Step Outside', anchorTown: true });
-  for (let x = doorX; x < doorX + 2; x++) m.block(x, RY1, 0);
   m.warps.push({ x: RX0 * TS, y: FY0 * TS, w: TS * 2, h: TS * 2,
                  to: 'kitchen', spawn: true, label: 'The Kitchen' });
-  m.interact.push({ x: 17 * TS, y: (RY1 - 1) * TS, w: TS * 2, h: TS * 2,
+  m.interact.push({ x: 24 * TS, y: (LOWY + 2) * TS, w: TS * 2, h: TS * 2,
                     type: 'openSign', label: 'Open / Close Shop' });
 
-  m.door = { x: (doorX + 1) * TS, y: RY1 * TS + 8 };
-  m.spawn = { x: (doorX + 1) * TS, y: (RY1 - 1) * TS };
-  m.browseY = (FY0 + 4) * TS;
+  m.roam = { x: RX0 + 2, y: FY0, w: UPPER[2] - 5, h: 3 };
+  m.door = { x: doorX * TS + 8, y: PORCH[1] * TS + 8 };
+  m.browseY = (FY0 + 2) * TS;
+  m.spawn = { x: doorX * TS + 8, y: (LOWY + 2) * TS };
   m.bounds = { x0: 0, y0: 0, x1: W * TS, y1: H * TS };
   m.props.sort((a, b) => a.sy - b.sy);
   return m;
@@ -475,25 +499,23 @@ export function buildShop() {
  * KITCHEN / FOOD LABORATORY
  * ================================================================== */
 export function buildKitchen() {
-  const W = 25, H = 14;
+  const W = 30, H = 17;
   const m = new GameMap('kitchen', W, H, { base: 'void', indoor: true, name: 'The Food Laboratory' });
-  m.ambient = { key: 'deep', amount: 0.42, tint: '#4a2f56', bloom: 0.7, vignetteAmt: 0.24 };
-  m.fill(0, 0, W, H, 'void');
+  m.ambient = { key: 'deep', amount: 0.40, tint: '#4a2f56', bloom: 0.6, vignetteAmt: 0.18 };
 
-  const RX0 = 2, RY0 = 1, RX1 = 22, RY1 = 12;
+  // a working hall with an alcove stepping out to the right and a stair landing
+  const HALL  = [3, 2, 20, 8];
+  const ALCOVE = [23, 5, 4, 6];
+  const LAND  = [8, 10, 12, 4];
+  const rects = [HALL, ALCOVE, LAND];
   const WALLH = 3;
-  const FY0 = RY0 + WALLH;
+  carveRoom(m, rects, { wallH: WALLH, wall: 'wallCastle', floor: 'labFloor' });
 
-  for (let y = RY0; y <= RY1; y++)
-    for (let x = RX0; x <= RX1; x++)
-      m.set(x, y, y < FY0 ? 'wallCastle' : 'labFloor');
+  const FY0 = HALL[1] + WALLH;                    // 5
+  const LOWY = LAND[1];                           // 10
+  const RX0 = HALL[0], RX1 = HALL[0] + HALL[2] - 1;
 
-  for (let y = 0; y < H; y++)
-    for (let x = 0; x < W; x++)
-      if (x < RX0 || x > RX1 || y < FY0 || y > RY1) m.block(x, y);
-
-  const fw = (RX1 - RX0 + 1) * TS, fh = (RY1 - RY0 + 1) * TS;
-  m.addProp(RX0 * TS - 8, RY0 * TS - 8, PR.roomFrame(fw + 16, fh + 16).canvas, 1e9);
+  m.addProp(LAND[0] * TS, LOWY * TS - 9, PR.terraceRiser(LAND[2] * TS, 'cool'), LOWY * TS - 1);
 
   /* ---- three cauldrons along the working wall ---- */
   m.cauldrons = [];
@@ -501,57 +523,57 @@ export function buildKitchen() {
     m.props.push({ x: cx * TS - 12, y: cy * TS - 22, img: ART.cauldron[0].canvas,
                    sy: cy * TS + 20, anim: 'cauldron', shadow: [15] });
     m.blockRect(cx, cy, 2, 1);
-    m.addLight(cx * TS + 8, cy * TS + 8, 58, '#ff9c30', 0.75, 1, 0.9);
+    m.addLight(cx * TS + 8, cy * TS + 8, 46, '#ff9c30', 0.7, 1, 0.85);
     m.cauldrons.push({ tx: cx, ty: cy, id: i, busy: 0, recipe: null });
     m.interact.push({ x: cx * TS - 10, y: cy * TS, w: TS * 3, h: TS * 2,
                       type: 'cauldron', id: i, label: 'Temper Chocolate' });
   });
 
-  /* ---- conching machines ---- */
+  /* ---- conching machines on the landing ---- */
   m.conches = [];
-  [[4, FY0 + 6], [19, FY0 + 6]].forEach(([cx, cy], i) => {
+  [[9, LOWY + 2], [17, LOWY + 2]].forEach(([cx, cy], i) => {
     m.props.push({ x: cx * TS - 9, y: cy * TS - 18, img: ART.conche[0].canvas,
                    sy: cy * TS + 18, anim: 'conche', shadow: [13] });
     m.blockRect(cx, cy, 2, 1);
-    m.addLight(cx * TS + 8, cy * TS, 40, '#ffb84a', 0.42, 0, 0.6);
+    m.addLight(cx * TS + 8, cy * TS, 30, '#ffb84a', 0.38, 0, 0.55);
     m.conches.push({ id: i, recipe: null, t: 0, dur: 0, qty: 0 });
     m.interact.push({ x: cx * TS - 10, y: cy * TS - 6, w: TS * 3, h: TS * 2,
                       type: 'conche', id: i, label: 'Conching Machine' });
   });
 
-  /* ---- shelves of ingredients along the wall ---- */
-  for (const sx of [3, 8, 14, 20])
-    m.addProp(sx * TS, RY0 * TS + 6, ART.shelf[sx % 3], FY0 * TS - 1);
-  m.addProp(11 * TS, RY0 * TS + 4, ART.wallCabinet, FY0 * TS - 2);
-
-  /* ---- benches + the recipe book ---- */
-  for (const [bx, by] of [[8, FY0 + 6], [13, FY0 + 6]]) {
+  /* ---- shelves and benches against the walls ---- */
+  for (const sx of [4, 9, 15, 20])
+    m.addProp(sx * TS, HALL[1] * TS + 6, ART.shelf[sx % 3], FY0 * TS - 1);
+  m.addProp(12 * TS, HALL[1] * TS + 4, ART.wallCabinet, FY0 * TS - 2);
+  for (const [bx, by] of [[8, FY0 + 3], [13, FY0 + 3]]) {
     m.addProp(bx * TS, by * TS - 10, ART.counter[1], by * TS + 16, [15]);
     m.blockRect(bx, by, 2, 1);
   }
-  m.interact.push({ x: 8 * TS, y: (FY0 + 6) * TS, w: TS * 7, h: TS * 2,
+  m.interact.push({ x: 8 * TS, y: (FY0 + 3) * TS, w: TS * 7, h: TS * 2,
                     type: 'recipeBook', label: 'Recipe Book' });
 
-  for (const [bx, by] of [[3, FY0 + 3], [20, FY0 + 3]]) {
-    m.addProp(bx * TS, by * TS - 4, ART.barrel, by * TS + 14, [7]);
-    m.block(bx, by);
-  }
-  for (const [px2, py2] of [[RX1 - 1, FY0], [RX0, FY0]]) {
+  /* ---- the alcove is the still-room ---- */
+  m.addProp(ALCOVE[0] * TS, (ALCOVE[1] + 3) * TS - 4, ART.barrel, (ALCOVE[1] + 3) * TS + 14, [7]);
+  m.block(ALCOVE[0], ALCOVE[1] + 3);
+  m.addProp((ALCOVE[0] + 2) * TS, (ALCOVE[1] + 4) * TS, ART.crate, (ALCOVE[1] + 4) * TS + 14, [7]);
+  m.block(ALCOVE[0] + 2, ALCOVE[1] + 4);
+  m.addLight((ALCOVE[0] + 2) * TS, (ALCOVE[1] + 3) * TS, 34, '#a394ee', 0.4, 1, 0.55);
+
+  for (const [px2, py2] of [[RX0, FY0], [RX1 - 1, FY0]]) {
     m.addProp(px2 * TS, py2 * TS - 14, PR.pottedPlant(px2), py2 * TS + 14, [8]);
     m.block(px2, py2);
   }
-  for (const [lx, ly] of [[RX0, RY1 - 1], [RX1 - 1, RY1 - 1]]) {
+  for (const [lx, ly] of [[LAND[0], LOWY + 2], [LAND[0] + LAND[2] - 1, LOWY + 2]]) {
     m.addProp(lx * TS, ly * TS - 14, ART.candelabra[0].canvas, ly * TS + 12);
     m.props[m.props.length - 1].anim = 'candelabra';
-    m.addLight(lx * TS + 7, ly * TS - 10, 54, '#ffd066', 0.55, 1, 0.7);
+    m.addLight(lx * TS + 7, ly * TS - 10, 34, '#ffd066', 0.45, 1, 0.6);
     m.block(lx, ly);
   }
 
-  m.warps.push({ x: 11 * TS, y: RY1 * TS, w: TS * 3, h: TS,
+  m.warps.push({ x: 13 * TS, y: (LOWY + LAND[3] - 1) * TS, w: TS * 3, h: TS,
                  to: 'shop', spawn: true, label: 'Back to the Shop' });
-  for (let x = 11; x < 14; x++) m.block(x, RY1, 0);
 
-  m.spawn = { x: 12 * TS, y: (RY1 - 1) * TS };
+  m.spawn = { x: 14 * TS, y: (LOWY + 1) * TS };
   m.bounds = { x0: 0, y0: 0, x1: W * TS, y1: H * TS };
   m.props.sort((a, b) => a.sy - b.sy);
   return m;

@@ -108,11 +108,15 @@ Three things carry the art direction:
 3. **Ground noise wraps.** Tile texture uses `wrapNoise`, a value noise on a
    lattice that repeats inside the tile, so large snow fields have no seams and
    no diagonal banding.
-4. **Interiors are islands on black.** A room is exactly one screen, so the
-   camera holds all of it at once, and it sits inside a multi-layer moulded
-   frame (`roomFrame()` in `art/props.js`) with near-black around it. The
-   footprint is deliberately irregular — a raised step across one end — because
-   a plain rectangle reads as a box rather than a room somebody built.
+4. **Interiors are islands on black.** A room is a *rectilinear polygon* — a
+   union of rectangles with at least one concave step and one protruding porch —
+   sitting on warm plum-black (`#120301`) with generous, deliberately unequal
+   margins, and it never fills the viewport. `roomFrameFromMask()` traces a
+   15px carved moulding round the silhouette from an outward distance field, so
+   every convex and concave corner mitres at 45° for free and the thickness
+   never varies by side. Floors are 8px boards with exactly one dark seam and no
+   butt joints; a step between levels gets a riser lighter than both floors it
+   joins. Lamps reach about two tiles — only a hearth lights a room.
 
 ## Development harness
 

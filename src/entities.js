@@ -530,8 +530,9 @@ export class Ghost {
           this.carrying = true;
           this.target = c;
         } else {
-          this.tx = (4 + Math.random() * 17) * TS;
-          this.ty = (5 + Math.random() * 7) * TS;
+          const r = (map && map.roam) || { x: 4, y: 5, w: 17, h: 4 };
+          this.tx = (r.x + Math.random() * r.w) * TS;
+          this.ty = (r.y + Math.random() * r.h) * TS;
           if (this.carrying && this.target) {
             game.restock(this.target);
             this.target = null;

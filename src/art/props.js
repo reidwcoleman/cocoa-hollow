@@ -219,7 +219,7 @@ export function shopfront(opts = {}) {
         const right = x > cx;
         // the right-hand plane sits exactly one step lighter — this is what
         // sells the pitch of the roof
-        let shade = course === 0 ? 3 : course < 3 ? 2 : 1;
+        let shade = course === 0 ? 2 : course < 3 ? 1 : 0;
         if (right) shade = Math.min(4, shade + 1);
         p.px(x, y, ROOF[shade]);
       }
@@ -229,10 +229,10 @@ export function shopfront(opts = {}) {
       // snow lies heaviest at the far end and along the ridge
       // patchy snow — the shingles must stay visible or the roof dissolves
       // into the snowfield behind it
-      const cover = 0.62 - t * 0.34;
+      const cover = 0.40 - t * 0.26;
       for (let x = xl; x <= xr; x++) {
         const q = fnoise(x / 6, y / 6, seed + 11);
-        if (q < cover) p.px(x, y, SNOW[q < cover * 0.5 ? 4 : 3]);
+        if (q < cover) p.px(x, y, SNOW[q < cover * 0.5 ? 3 : 2]);
       }
       // ridge, running the whole depth
       p.rect(cx - 1, y, 2, 1, ROOF[4]);
@@ -1347,10 +1347,9 @@ export function rugLarge(w, h) {
     p.ring(ox, oy, 4, 4, G[2]);
     p.px(ox, oy, G[3]);
   }
-  // fringe
-  for (let x = 1; x < w - 1; x += 2) {
-    p.px(x, 0, R.cream[3]); p.px(x, h - 1, R.cream[3]);
-  }
+  // hard keyline, and a single contact line along the bottom edge only
+  p.frame(0, 0, w, h, '#2a0f18');
+  p.hline(1, h - 1, w - 2, '#1d0a12');
   return p.canvas;
 }
 
@@ -1361,38 +1360,117 @@ export function rugLarge(w, h) {
  * signature of the reference interior idiom.
  */
 export function roomFrame(w, h) {
-  const p = new P(w, h);
-  const F = R.frameWood;
-  // band profile from the outside in: [thickness, ramp index]
-  const bands = [[2, 0], [4, 2], [2, 1], [5, 3], [2, 1], [4, 2], [1, 0], [1, 3], [1, 0]];
-  let off = 0;
-  for (const [t, ci] of bands) {
-    for (let k = 0; k < t; k++) {
-      const i = off + k;
-      if (i * 2 >= Math.min(w, h)) break;
-      p.frame(i, i, w - i * 2, h - i * 2, F[ci]);
-    }
-    off += t;
-  }
-  // a lit bead along the top and left of the moulding, shadow bottom-right
-  p.hline(2, 2, w - 4, F[3]);
-  p.vline(2, 2, h - 4, F[3]);
-  p.hline(2, h - 3, w - 4, F[0]);
-  p.vline(w - 3, 2, h - 4, F[0]);
-  // corner blocks
-  for (const [cx, cy] of [[2, 2], [w - 10, 2], [2, h - 10], [w - 10, h - 10]]) {
-    p.rect(cx, cy, 8, 8, F[2]);
-    p.frame(cx, cy, 8, 8, F[1]);
-    p.rect(cx + 2, cy + 2, 4, 4, F[3]);
-    p.px(cx + 3, cy + 3, F[4]);
-  }
-  // punch the middle back out — the frame is a ring
-  const ix = off, iy = off;
-  p.x.clearRect(ix, iy, w - ix * 2, h - iy * 2);
-  return { canvas: p.canvas, inset: off };
+  // kept for callers that still want a plain rectangular ring
+  return roomFrameFromMask(w, h, (x, y) => x >= 16 && y >= 16 && x < w - 16 && y < h - 16);
 }
 
-/** Heavy striped curtain hung on a rail, for a back wall. */
+/**
+ * Carved moulding traced around an arbitrary rectilinear room silhouette.
+ *
+ * The profile is painted from an outward distance field rather than as four
+ * straight edges, so every convex and concave corner mitres at 45 degrees for
+ * free and the thickness never varies by side — both of which the reference
+ * idiom is strict about.
+ *
+ * `inside(x, y)` returns true for pixels that are room interior.
+ */
+export function roomFrameFromMask(w, h, inside) {
+  const F = R.frameWood;
+  // outward-to-inward: keyline, double incised groove, flat field,
+  // mirrored groove, keyline. 15px total, then a 2px shadow inside the room.
+  const PROFILE = [
+    '#210c12',                                  // outer keyline
+    '#4d2513', '#70391b', '#4d2513', '#70391b', // double groove
+    '#4d2513', '#4d2513', '#4d2513', '#4d2513', '#4d2513',   // flat field
+    '#70391b', '#4d2513', '#70391b', '#4d2513', // mirrored groove
+    '#210c12',                                  // inner keyline
+  ];
+  const T = PROFILE.length;
+
+  const inRoom = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++)
+      if (inside(x, y)) inRoom[y * w + x] = 1;
+
+  // BFS outward from the room edge; the queue distance is the profile index
+  const dist = new Int16Array(w * h).fill(-1);
+  let frontier = [];
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (inRoom[y * w + x]) continue;
+      // adjacent to the room (8-way) => distance 0, the outermost inner band
+      let touch = false;
+      for (let dy = -1; dy <= 1 && !touch; dy++)
+        for (let dx = -1; dx <= 1 && !touch; dx++) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+          if (inRoom[ny * w + nx]) touch = true;
+        }
+      if (touch) { dist[y * w + x] = 0; frontier.push(y * w + x); }
+    }
+  }
+  for (let d = 0; d < T && frontier.length; d++) {
+    const next = [];
+    for (const idx of frontier) {
+      const x = idx % w, y = (idx / w) | 0;
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+          const ni = ny * w + nx;
+          if (inRoom[ni] || dist[ni] !== -1) continue;
+          dist[ni] = d + 1;
+          next.push(ni);
+        }
+    }
+    frontier = next;
+  }
+
+  const p = new P(w, h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const d = dist[y * w + x];
+      if (d < 0 || d >= T) continue;
+      // the field is painted inward-to-outward, so flip the index
+      p.px(x, y, PROFILE[T - 1 - d]);
+    }
+  }
+  // 2px shadow band just inside the room, where the ceiling casts down
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      if (!inRoom[y * w + x]) continue;
+      let near = false;
+      for (let dy = -2; dy <= 2 && !near; dy++)
+        for (let dx = -2; dx <= 2 && !near; dx++) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= w || ny >= h) { near = true; break; }
+          if (!inRoom[ny * w + nx]) near = true;
+        }
+      if (near) p.px(x, y, '#331818');
+    }
+  return { canvas: p.canvas, inset: T };
+}
+
+/**
+ * The riser face of a step between two floor levels. Always lighter than both
+ * floors it joins, with a bright nosing on top and a near-black line beneath.
+ */
+export function terraceRiser(w, hue = 'warm') {
+  const T = hue === 'cool'
+    ? ['#7a6ad0', '#5f51ab', '#4a3e8c', '#3d3374', '#1d1840']
+    : ['#bc592b', '#99462a', '#7c352a', '#6b352a', '#3f2019'];
+  const p = new P(w, 9);
+  p.rect(0, 0, w, 1, T[0]);            // nosing catches the light
+  p.rect(0, 1, w, 3, T[1]);
+  p.rect(0, 4, w, 3, T[2]);
+  p.rect(0, 7, w, 1, T[3]);
+  p.rect(0, 8, w, 1, T[4]);            // contact line
+  for (let x = 3; x < w - 3; x += 7)
+    if (hash2(x, 5, 71) > 0.5) p.px(x, 3, T[1]);
+  return p.canvas;
+}
+
+/** Heavy striped curtain hung on a rail, for a back wall. *//** Heavy striped curtain hung on a rail, for a back wall. */
 export function curtain(w, h) {
   const p = new P(w, h);
   const C1 = R.roomBrick[2], C2 = R.roomBrick[3];

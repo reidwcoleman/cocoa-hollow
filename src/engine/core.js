@@ -2,7 +2,8 @@
 
 import { makeCanvas, ctxOf } from '../art/pixel.js';
 
-export const VW = 400, VH = 225;   // internal pixel resolution (25 x 14 tiles)
+// The reference idiom renders a 480x270 stage at 4x, i.e. 30 x 16.9 tiles.
+export const VW = 480, VH = 270;
 
 export class Screen {
   constructor(canvasEl) {

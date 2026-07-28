@@ -239,26 +239,26 @@ function roomBrickTile(p, seed) {
 
 /* ---------------- shop wooden floor ---------------- */
 function woodFloorTile(p, seed) {
-  const plankH = 8;                      // wide warm boards running across
+  // 8px boards running horizontally: flat field plus exactly one 1px dark seam
+  // along the bottom. No highlight edge, no vertical butt joints — both read as
+  // a different, wrong flooring.
+  const plankH = 8;
   for (let py = 0; py < TS; py += plankH) {
     const i = (py / plankH) | 0;
-    const v = hash2(i, seed, 101);
-    const b = 2 + Math.round(v * 1.2 - 0.6);
-    p.rect(0, py, TS, plankH, R.boards[b]);
-    p.hline(0, py, TS, R.boards[Math.min(4, b + 1)]);
+    const b = 2 + Math.round(hash2(i, seed, 101) * 1.2 - 0.6);
+    p.rect(0, py, TS, plankH, R.boards[Math.max(1, Math.min(3, b))]);
     p.hline(0, py + plankH - 1, TS, R.boards[Math.max(0, b - 1)]);
-    // grain streaks
-    for (let g = 0; g < 4; g++) {
-      const gx = (hash2(g, i + seed * 4, 111) * TS) | 0;
-      const gl = 2 + ((hash2(g, i + seed * 4, 112) * 4) | 0);
-      p.hline(gx, py + 1 + ((hash2(g, i, 113) * (plankH - 2)) | 0),
-              Math.min(gl, TS - gx), R.boards[Math.max(0, b - 1)]);
+    // sparse grain dashes, never touching a seam, never on a grid
+    for (let g = 0; g < 2; g++) {
+      if (hash2(g, i + seed * 4, 111) < 0.45) continue;
+      const gx = (hash2(g, i + seed * 4, 112) * (TS - 5)) | 0;
+      const gl = 2 + ((hash2(g, i + seed * 4, 113) * 3) | 0);
+      const gy = py + 2 + ((hash2(g, i + seed, 114) * (plankH - 4)) | 0);
+      p.hline(gx, gy, gl, R.boards[hash2(g, i, 115) > 0.5 ? Math.max(0, b - 1) : Math.min(4, b + 1)]);
     }
-    // occasional butt joint, not one per plank per tile
-    if (hash2(i, seed, 121) > 0.72) {
-      const seam = 2 + ((hash2(i, seed, 122) * (TS - 4)) | 0);
-      p.vline(seam, py + 1, plankH - 2, R.boards[Math.max(0, b - 1)]);
-    }
+    // an occasional knot
+    if (hash2(i, seed, 116) > 0.86)
+      p.ellipse(3 + ((hash2(i, seed, 117) * (TS - 6)) | 0), py + 4, 2, 1, R.boards[Math.max(0, b - 1)]);
   }
 }
 

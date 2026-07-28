@@ -837,7 +837,8 @@ export class Game {
     const map = this.map;
 
     /* ---- background ---- */
-    g.fillStyle = map.indoor ? '#0d0a16' : '#0a0c1c';
+    // interiors sit on a warm plum-black, which lifts every colour in frame
+    g.fillStyle = map.indoor ? '#120301' : '#0a0c1c';
     g.fillRect(0, 0, VW, VH);
 
     /* ---- ground ---- */
